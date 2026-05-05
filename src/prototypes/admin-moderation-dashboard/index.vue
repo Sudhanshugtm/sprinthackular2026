@@ -159,7 +159,7 @@ const tasks = ref<Task[]>([
     reason: 'Repeated disruptive edits by multiple new and anonymous editors.',
     judgment: 'Decide whether disruption is broad enough for page protection, or whether user-level action is enough.',
     signals: [
-      'Unanswered RFPP thread',
+      'No admin reply on RFPP thread',
       'Multiple recent editors in history',
       'Protection not currently active',
     ],
@@ -216,10 +216,10 @@ const visibleTasks = computed(() => tasks.value.filter((task) => task.status !==
 
 const protectionSortItems = [
   { value: 'hot', label: 'Active disruption first' },
-  { value: 'unanswered', label: 'Unanswered first' },
+  { value: 'unanswered', label: 'No admin reply first' },
   { value: 'multi', label: 'Most editors involved' },
-  { value: 'oldest', label: 'Oldest first' },
-  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Waiting longest' },
+  { value: 'newest', label: 'Recently requested' },
 ]
 const protectionSortValue = ref('hot')
 
@@ -231,7 +231,7 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     requestSummary: 'Semi-protection requested for 1 week',
     signalLabel: 'Active disruption',
     signalLine: 'Last revert 12m ago · 5 actors · 24 reverts in 6h',
-    status: 'Unanswered',
+    status: 'No admin reply',
     activeScore: 100,
     actorCount: 5,
     ageHours: 6,
@@ -255,7 +255,7 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     requestSummary: 'Indefinite semi-protection requested',
     signalLabel: 'Recurring vandalism',
     signalLine: 'Repeated diagnosis claims · recent diffs supplied',
-    status: 'Unanswered',
+    status: 'No admin reply',
     activeScore: 70,
     actorCount: 3,
     ageHours: 14,
@@ -267,7 +267,7 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     requestSummary: 'Temporary semi-protection requested',
     signalLabel: 'Sourcing disruption',
     signalLine: 'Unsourced additions · blocked temp account involved',
-    status: 'Unanswered',
+    status: 'No admin reply',
     activeScore: 45,
     actorCount: 2,
     ageHours: 22,
@@ -291,7 +291,7 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     requestSummary: 'Semi-protection requested',
     signalLabel: 'Protection expired',
     signalLine: 'Vandalism resumed immediately after expiry',
-    status: 'Unanswered',
+    status: 'No admin reply',
     activeScore: 85,
     actorCount: 4,
     ageHours: 2,
@@ -304,7 +304,10 @@ const sortedOptionBProtectionRequests = computed(() => {
 
   switch (protectionSortValue.value) {
     case 'unanswered':
-      return requests.sort((a, b) => Number(b.status === 'Unanswered') - Number(a.status === 'Unanswered') || byActive(a, b))
+      return requests.sort((a, b) =>
+        Number(b.status === 'No admin reply') - Number(a.status === 'No admin reply') ||
+        byActive(a, b)
+      )
     case 'multi':
       return requests.sort((a, b) => b.actorCount - a.actorCount || byActive(a, b))
     case 'oldest':
@@ -583,7 +586,7 @@ function variantOptionLabel(variantId: DashboardVariantId) {
             <div class="personal-dashboard-detail__body">
               <div class="personal-dashboard-detail__toolbar">
                 <p class="personal-dashboard-detail__lede-line">
-                  <strong>17</strong> open · <strong>6</strong> unanswered
+                  <strong>17</strong> unresolved · <strong>6</strong> no admin reply
                 </p>
                 <div class="personal-dashboard-detail__sort-row">
                   <span class="personal-dashboard-detail__sort-label">Sort</span>
@@ -616,7 +619,7 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                     Last revert 12m ago · 5 actors · 24 reverts in 6h
                   </p>
                   <p class="personal-dashboard-detail__status-line">
-                    Unanswered
+                    No admin reply
                   </p>
                 </article>
 
@@ -663,7 +666,7 @@ function variantOptionLabel(variantId: DashboardVariantId) {
             <div class="personal-dashboard-detail__body">
               <div class="personal-dashboard-detail__toolbar">
                 <p class="personal-dashboard-detail__lede-line">
-                  <strong>17</strong> open · <strong>6</strong> unanswered
+                  <strong>17</strong> unresolved · <strong>6</strong> no admin reply
                 </p>
                 <div class="personal-dashboard-detail__sort-row">
                   <span class="personal-dashboard-detail__sort-label">Sort</span>
@@ -724,7 +727,7 @@ function variantOptionLabel(variantId: DashboardVariantId) {
             <div class="personal-dashboard-detail__body">
               <div class="personal-dashboard-detail__toolbar">
                 <p class="personal-dashboard-detail__lede-line">
-                  <strong>4</strong> in queue · <strong>2</strong> need decision
+                  <strong>4</strong> awaiting review · <strong>2</strong> need decision
                 </p>
                 <div class="personal-dashboard-detail__sort-row">
                   <span class="personal-dashboard-detail__sort-label">Sort</span>
@@ -794,25 +797,20 @@ function variantOptionLabel(variantId: DashboardVariantId) {
               <CdxIcon :icon="cdxIconNext" />
             </header>
             <ul class="personal-dashboard-baseline__protection-metrics" aria-label="Pages for protection details">
-              <li>
+              <li aria-label="17 unresolved protection requests">
                 <CdxIcon :icon="cdxIconSpeechBubble" />
                 <strong>17</strong>
-                <span>open</span>
+                <span>unresolved</span>
               </li>
-              <li>
+              <li aria-label="6 protection requests have no admin reply">
                 <CdxIcon :icon="cdxIconHistory" />
                 <strong>6</strong>
-                <span>unanswered</span>
+                <span>no admin reply</span>
               </li>
-              <li>
+              <li aria-label="Longest unresolved protection request has waited 22 hours">
                 <CdxIcon :icon="cdxIconClock" />
                 <strong>22h</strong>
-                <span>oldest</span>
-              </li>
-              <li>
-                <CdxIcon :icon="cdxIconRecentChanges" />
-                <strong>57</strong>
-                <span>new today</span>
+                <span>longest wait</span>
               </li>
             </ul>
           </a>
@@ -828,25 +826,20 @@ function variantOptionLabel(variantId: DashboardVariantId) {
               <CdxIcon :icon="cdxIconNext" />
             </header>
             <ul class="personal-dashboard-baseline__protection-metrics" aria-label="Pages for speedy deletion details">
-              <li>
+              <li aria-label="4 speedy deletion pages are awaiting admin review">
                 <CdxIcon :icon="cdxIconTrash" />
                 <strong>4</strong>
-                <span>in queue</span>
+                <span>awaiting review</span>
               </li>
-              <li>
+              <li aria-label="2 speedy deletion pages need an admin decision">
                 <CdxIcon :icon="cdxIconHistory" />
                 <strong>2</strong>
                 <span>need decision</span>
               </li>
-              <li>
+              <li aria-label="Longest speedy deletion page has waited 3 hours">
                 <CdxIcon :icon="cdxIconClock" />
                 <strong>3h</strong>
-                <span>oldest</span>
-              </li>
-              <li>
-                <CdxIcon :icon="cdxIconRecentChanges" />
-                <strong>27</strong>
-                <span>new today</span>
+                <span>longest wait</span>
               </li>
             </ul>
           </a>
