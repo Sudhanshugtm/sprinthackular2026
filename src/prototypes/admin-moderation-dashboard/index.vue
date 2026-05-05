@@ -329,7 +329,7 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
   {
     id: 'smith-industries',
     title: 'Smith Industries Holdings Ltd',
-    criterion: 'G11 · Promotional',
+    criterion: 'G11 · Advertising',
     visibility: '42 views in last hour',
     requestSummary: 'Tagged 14m ago · company-style article',
     signalLabel: 'Admin question',
@@ -343,7 +343,7 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
   {
     id: 'regional-innovation',
     title: 'Regional innovation timeline',
-    criterion: 'G15 · LLM-generated',
+    criterion: 'G15 · Unreviewed LLM content',
     visibility: '90 views · contested',
     requestSummary: 'Tagged 3h ago · disputed on talk page',
     signalLabel: 'Admin question',
@@ -371,12 +371,12 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
   {
     id: 'orphan-template',
     title: 'Talk:Discontinued template (orphan)',
-    criterion: 'G6 · Maintenance',
-    visibility: 'Maintenance page · low traffic',
+    criterion: 'G6 · Housekeeping',
+    visibility: 'Housekeeping page · low traffic',
     requestSummary: 'Tagged 1d ago · target template deleted',
     signalLabel: 'Routine check',
     signalLine: 'Confirm no useful talk history before deleting.',
-    status: 'Maintenance cleanup',
+    status: 'Housekeeping cleanup',
     ageMinutes: 1440,
     needsDecision: false,
     decisionScore: 10,
