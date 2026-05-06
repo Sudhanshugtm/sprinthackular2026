@@ -10,6 +10,12 @@ Version links:
 - Prototype v0: `variant=option-b`
 - Prototype v1 (latest): `variant=current`
 
+Prototype v1 design directions:
+
+- Cards: current: `variant=current&direction=cards-current`
+- Cards: compact: `variant=current&direction=cards-compact`
+- Cards: evidence-first: `variant=current&direction=cards-evidence`
+
 ## Current Prototype Snapshot
 
 The prototype is a mobile-first Personal Dashboard direction for administrators. It keeps the dashboard as the stable venue and adds admin-specific backlog cards.
