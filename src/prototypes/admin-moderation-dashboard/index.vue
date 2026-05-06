@@ -41,7 +41,7 @@ definePage({
 
 type TaskType = 'protection' | 'deletion'
 type TaskStatus = 'needs-review' | 'in-discussion' | 'already-handled'
-type DashboardVariantId = 'base' | 'option-a' | 'option-b'
+type DashboardVariantId = 'base' | 'option-a' | 'option-b' | 'current'
 
 interface Task {
   id: string
@@ -120,11 +120,19 @@ const variants: DashboardVariant[] = [
   },
   {
     id: 'option-b',
-    label: 'Option B',
+    label: 'Prototype v0',
     heading: 'Current Personal Dashboard',
-    description: 'Starts from the Option A treatment; will add a second admin backlog card.',
-    lensLabel: 'Option B',
+    description: 'Previous prototype version with two admin backlog cards.',
+    lensLabel: 'Prototype v0',
     lensCopy: 'Per-backlog stacking: each admin queue gets its own card in the same pattern.',
+  },
+  {
+    id: 'current',
+    label: 'Prototype v1 (latest)',
+    heading: 'Current Personal Dashboard',
+    description: 'Latest prototype version with admin backlog cards and clarified queue metrics.',
+    lensLabel: 'Prototype v1',
+    lensCopy: 'Latest iteration: current actionability is separated from incoming volume.',
   },
 ]
 
@@ -140,6 +148,11 @@ const summaryByVariant = {
     { icon: cdxIconRecentChanges, value: '4', label: 'changes' },
   ],
   'option-b': [
+    { icon: cdxIconBell, value: '0', label: 'alerts' },
+    { icon: cdxIconTray, value: '1', label: 'notice', strong: true },
+    { icon: cdxIconRecentChanges, value: '4', label: 'changes' },
+  ],
+  current: [
     { icon: cdxIconBell, value: '0', label: 'alerts' },
     { icon: cdxIconTray, value: '1', label: 'notice', strong: true },
     { icon: cdxIconRecentChanges, value: '4', label: 'changes' },
@@ -199,13 +212,13 @@ const selectedTaskId = ref(tasks.value[0].id)
 const variantSwitcherOpen = ref(false)
 const activeVariantId = ref<DashboardVariantId>(getInitialVariant())
 const optionAProtectionViewOpen = ref(getInitialVariant() === 'option-a' && getInitialModule() === 'protection')
-const optionBProtectionViewOpen = ref(getInitialVariant() === 'option-b' && getInitialModule() === 'protection')
-const optionBSpeedyViewOpen = ref(getInitialVariant() === 'option-b' && getInitialModule() === 'speedy')
+const optionBProtectionViewOpen = ref(isAdminPrototypeVariantId(getInitialVariant()) && getInitialModule() === 'protection')
+const optionBSpeedyViewOpen = ref(isAdminPrototypeVariantId(getInitialVariant()) && getInitialModule() === 'speedy')
 const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? tasks.value[0])
 const activeVariant = computed(() => variants.find((variant) => variant.id === activeVariantId.value) ?? variants[0])
-const usesCurrentDashboardTreatment = computed(() => activeVariant.value.id === 'base' || activeVariant.value.id === 'option-a' || activeVariant.value.id === 'option-b')
+const usesCurrentDashboardTreatment = computed(() => activeVariant.value.id === 'base' || activeVariant.value.id === 'option-a' || isAdminPrototypeVariantId(activeVariant.value.id))
 const isOptionAVariant = computed(() => activeVariant.value.id === 'option-a')
-const isOptionBVariant = computed(() => activeVariant.value.id === 'option-b')
+const isOptionBVariant = computed(() => isAdminPrototypeVariantId(activeVariant.value.id))
 const isOptionAProtectionDetail = computed(() => isOptionAVariant.value && optionAProtectionViewOpen.value)
 const isOptionBProtectionDetail = computed(() => isOptionBVariant.value && optionBProtectionViewOpen.value)
 const isOptionBSpeedyDetail = computed(() => isOptionBVariant.value && optionBSpeedyViewOpen.value)
@@ -415,7 +428,11 @@ function taskIcon(task: Task) {
 }
 
 function isDashboardVariant(value: string | null): value is DashboardVariantId {
-  return value === 'base' || value === 'option-a' || value === 'option-b'
+  return value === 'base' || value === 'option-a' || value === 'option-b' || value === 'current'
+}
+
+function isAdminPrototypeVariantId(value: DashboardVariantId) {
+  return value === 'option-b' || value === 'current'
 }
 
 function getInitialVariant(): DashboardVariantId {
@@ -515,7 +532,9 @@ function variantOptionLabel(variantId: DashboardVariantId) {
     case 'option-a':
       return 'Option A'
     case 'option-b':
-      return 'Prototype'
+      return 'Prototype v0'
+    case 'current':
+      return 'Prototype v1 (latest)'
   }
 }
 </script>
