@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { CdxIcon } from '@wikimedia/codex'
+import { CdxButton, CdxIcon } from '@wikimedia/codex'
 import { cdxIconExpand, cdxIconUserAvatar } from '@wikimedia/codex-icons'
 
 import ChromeWrapper from '@/components/ChromeWrapper.vue'
@@ -31,42 +31,34 @@ const moduleParam = computed<Module>(() => {
   return 'protection'
 })
 
+// Canonical "return to dashboard" URL — module is the one the admin is viewing.
 const fallbackDashboardRoute = computed(() => ({
   path: '/admin-moderation-dashboard',
   query: {
-    variant: 'current',
+    variant: 'prototype-v2',
     direction: 'cards-attention',
+    protection: 'stale',
+    speedy: 'stale',
     module: moduleParam.value,
   },
 }))
 
-function isDashboardPath(path: unknown): path is string {
-  return (
-    typeof path === 'string' &&
-    (path === fallbackDashboardRoute.value.path ||
-      path.startsWith(`${fallbackDashboardRoute.value.path}?`))
-  )
-}
-
-function getDashboardBackPath() {
-  const previousPath = window.history.state?.back
-  return isDashboardPath(previousPath) ? previousPath : null
-}
-
-function getDashboardReturnPath() {
-  const returnPath = window.history.state?.dashboardReturnTo
-  return isDashboardPath(returnPath) ? returnPath : null
-}
-
 function goBackToDashboard(event: Event) {
   event.preventDefault()
-  if (getDashboardBackPath()) {
-    router.back()
-  } else if (getDashboardReturnPath()) {
-    router.push(getDashboardReturnPath() as string)
-  } else {
-    router.push(fallbackDashboardRoute.value)
-  }
+  router.push(fallbackDashboardRoute.value)
+}
+
+// Protect CTA strip — surfaced when admin came from the protection queue.
+// Gate on the explicit query param, not the computed default, so a no-module
+// URL doesn't accidentally show it.
+const showProtectCta = computed(() => route.query.module === 'protection')
+
+function goToProtectForm(event?: Event) {
+  if (event) event.preventDefault()
+  router.push({
+    path: '/admin-moderation-dashboard/protect',
+    query: { title: pageTitle.value, module: 'protection' },
+  })
 }
 
 interface Revision {
@@ -345,7 +337,7 @@ function deltaClass(d: number) {
 
 <template>
   <ChromeWrapper skin="mobile">
-    <article class="history">
+    <article class="history" :class="{ 'history--has-cta': showProtectCta }">
       <h1 class="history__title">{{ pageTitle }}: Revision history</h1>
 
       <p class="history__back">
@@ -401,6 +393,28 @@ function deltaClass(d: number) {
             </div>
           </li>
         </ul>
+      </section>
+
+      <!--
+        Protect CTA strip — only when the admin arrived from the protection
+        queue. Sits below the revision list so the admin reads the history first
+        and acts after.
+      -->
+      <section
+        v-if="showProtectCta"
+        class="history__protect-cta"
+        role="region"
+        aria-label="Protection actions"
+      >
+        <CdxButton
+          class="history__protect-cta-primary"
+          weight="primary"
+          action="progressive"
+          size="medium"
+          @click="goToProtectForm"
+        >
+          Protect this page
+        </CdxButton>
       </section>
     </article>
   </ChromeWrapper>
@@ -569,5 +583,35 @@ function deltaClass(d: number) {
 .history__summary {
   color: var(--color-base, #202122);
   word-break: break-word;
+}
+
+/*
+ * Protect CTA strip — pinned to the viewport bottom while module=protection so
+ * the button stays in reach as the admin scrolls through the revision list.
+ * Article body gets bottom padding (.history--has-cta) to keep the last
+ * revision row from sliding under the strip.
+ */
+.history__protect-cta {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-75, 12px);
+  padding: var(--spacing-100, 16px);
+  padding-bottom: calc(var(--spacing-100, 16px) + env(safe-area-inset-bottom, 0));
+  background-color: var(--background-color-base, #fff);
+  border-top: 1px solid var(--border-color-subtle, #eaecf0);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.history__protect-cta-primary {
+  align-self: stretch;
+}
+
+.history--has-cta {
+  padding-bottom: calc(var(--spacing-200, 32px) + 64px + env(safe-area-inset-bottom, 0));
 }
 </style>

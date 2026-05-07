@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { CdxButton, CdxIcon, CdxInfoChip, CdxSelect } from '@wikimedia/codex'
+import {
+  CdxButton,
+  CdxCheckbox,
+  CdxDialog,
+  CdxIcon,
+  CdxInfoChip,
+  CdxRadio,
+  CdxSearchInput,
+  CdxSelect,
+} from '@wikimedia/codex'
 import {
   cdxIconAlert,
   cdxIconArticle,
@@ -30,6 +39,7 @@ import {
   cdxIconTray,
   cdxIconUserAvatar,
   cdxIconUserAvatarOutline,
+  cdxIconUserGroup,
   type Icon,
 } from '@wikimedia/codex-icons'
 
@@ -47,10 +57,16 @@ const route = useRoute()
 
 type TaskType = 'protection' | 'deletion'
 type TaskStatus = 'needs-review' | 'in-discussion' | 'already-handled'
-type DashboardVariantId = 'base' | 'option-a' | 'option-b' | 'current'
+type DashboardVariantId = 'base' | 'option-a' | 'option-b' | 'current' | 'prototype-v2'
 type CardTreatmentId = 'cards-current' | 'cards-compact' | 'cards-evidence' | 'cards-attention'
 type ProtectionCardState = 'calm' | 'stale'
 type SpeedyCardState = 'calm' | 'contested' | 'stale'
+type SpeedyCriterionNamespace = 'general' | 'article' | 'category' | 'file' | 'redirect' | 'template' | 'user'
+
+const defaultVariantId: DashboardVariantId = 'prototype-v2'
+const defaultCardTreatmentId: CardTreatmentId = 'cards-attention'
+const defaultProtectionState: ProtectionCardState = 'stale'
+const defaultSpeedyState: SpeedyCardState = 'stale'
 
 interface Task {
   id: string
@@ -111,6 +127,7 @@ interface ProtectionRequestCard {
 interface SpeedyDeletionCard {
   id: string
   title: string
+  criterionCode: string
   criterion: string
   visibility: string
   requestSummary: string
@@ -121,7 +138,6 @@ interface SpeedyDeletionCard {
   ageMinutes: number
   contested: boolean
   decisionScore: number
-  criterionOrder: number
 }
 
 const moderator = {
@@ -157,11 +173,19 @@ const variants: DashboardVariant[] = [
   },
   {
     id: 'current',
-    label: 'Prototype v1 (latest)',
+    label: 'Prototype v1',
     heading: 'Current Personal Dashboard',
     description: 'Latest prototype version with admin backlog cards and clarified queue metrics.',
     lensLabel: 'Prototype v1',
     lensCopy: 'Latest iteration: current actionability is separated from incoming volume.',
+  },
+  {
+    id: 'prototype-v2',
+    label: 'Prototype v2 (latest)',
+    heading: 'Current Personal Dashboard',
+    description: 'Next prototype version cloned from v1 for the next feedback iteration.',
+    lensLabel: 'Prototype v2',
+    lensCopy: 'Next iteration canvas: starts from v1 so new changes can diverge without disturbing it.',
   },
 ]
 
@@ -184,7 +208,9 @@ const cardTreatments: CardTreatment[] = [
   },
 ]
 
-const visibleCardTreatments = cardTreatments.filter(({ id }) => id === 'cards-current' || id === 'cards-attention')
+const visibleCardTreatments = cardTreatments.filter(
+  ({ id }) => id === 'cards-current' || id === 'cards-attention',
+)
 
 const protectionStateOptions: CardStateOption<ProtectionCardState>[] = [
   {
@@ -211,6 +237,77 @@ const speedyStateOptions: CardStateOption<SpeedyCardState>[] = [
     label: 'Stale',
   },
 ]
+
+interface SpeedyCriterion {
+  code: string
+  name: string
+  namespace: SpeedyCriterionNamespace
+}
+
+const speedyCriteria: SpeedyCriterion[] = [
+  { code: 'G1', name: 'Patent nonsense', namespace: 'general' },
+  { code: 'G2', name: 'Test pages', namespace: 'general' },
+  { code: 'G3', name: 'Pure vandalism / blatant hoaxes', namespace: 'general' },
+  { code: 'G4', name: 'Recreated previously deleted page', namespace: 'general' },
+  { code: 'G5', name: 'Created by banned/blocked user', namespace: 'general' },
+  { code: 'G6', name: 'Housekeeping', namespace: 'general' },
+  { code: 'G7', name: 'Author request', namespace: 'general' },
+  { code: 'G8', name: 'Dependent on non-existent / broken redirect', namespace: 'general' },
+  { code: 'G10', name: 'Attack pages', namespace: 'general' },
+  { code: 'G11', name: 'Unambiguous advertising', namespace: 'general' },
+  { code: 'G12', name: 'Unambiguous copyright violation', namespace: 'general' },
+  { code: 'G13', name: 'Abandoned drafts / AfC submissions', namespace: 'general' },
+  { code: 'G14', name: 'Unnecessary disambiguation pages', namespace: 'general' },
+  { code: 'G15', name: 'Unreviewed LLM content', namespace: 'general' },
+  { code: 'A1', name: 'No context', namespace: 'article' },
+  { code: 'A2', name: 'Exists on foreign Wikimedia project', namespace: 'article' },
+  { code: 'A3', name: 'No content', namespace: 'article' },
+  { code: 'A7', name: 'Significance not indicated', namespace: 'article' },
+  { code: 'A9', name: 'No significance (musical recordings)', namespace: 'article' },
+  { code: 'A10', name: 'Recently created duplicate', namespace: 'article' },
+  { code: 'A11', name: 'Obviously invented', namespace: 'article' },
+  { code: 'C1', name: 'Empty categories', namespace: 'category' },
+  { code: 'C4', name: 'Unused maintenance categories', namespace: 'category' },
+  { code: 'F1', name: 'Redundant files', namespace: 'file' },
+  { code: 'F2', name: 'Missing or corrupt files', namespace: 'file' },
+  { code: 'F3', name: 'Unacceptably licensed files', namespace: 'file' },
+  { code: 'F5', name: 'Orphaned non-free use files', namespace: 'file' },
+  { code: 'F7', name: 'Clearly invalid fair-use files', namespace: 'file' },
+  { code: 'F9', name: 'Copyright-infringing files', namespace: 'file' },
+  { code: 'R2', name: 'Inappropriate cross-namespace redirects', namespace: 'redirect' },
+  { code: 'R3', name: 'Implausible redirects / typos', namespace: 'redirect' },
+  { code: 'R4', name: 'Redirects shadowing Commons pages', namespace: 'redirect' },
+  { code: 'T2', name: 'Misrepresentation of policy', namespace: 'template' },
+  { code: 'T3', name: 'Duplicated/hardcoded templates', namespace: 'template' },
+  { code: 'T5', name: 'Unused template subpage', namespace: 'template' },
+  { code: 'U1', name: 'User request to delete own page', namespace: 'user' },
+  { code: 'U2', name: 'Userpage of nonexistent user', namespace: 'user' },
+  { code: 'U3', name: 'Non-free galleries in user space', namespace: 'user' },
+  { code: 'U5', name: 'Misuse as a web host', namespace: 'user' },
+]
+
+const criterionNamespaces: SpeedyCriterionNamespace[] = [
+  'general',
+  'article',
+  'category',
+  'file',
+  'redirect',
+  'template',
+  'user',
+]
+const criterionNamespaceLabels = {
+  general: 'GENERAL',
+  article: 'ARTICLE',
+  category: 'CATEGORY',
+  file: 'FILE',
+  redirect: 'REDIRECT',
+  template: 'TEMPLATE',
+  user: 'USER',
+} satisfies Record<SpeedyCriterionNamespace, string>
+const pinnedCriterionCodes = ['G7', 'G15', 'G11', 'G6'] as const
+const pinnedSpeedyCriteria = pinnedCriterionCodes
+  .map((code) => speedyCriteria.find((criterion) => criterion.code === code))
+  .filter((criterion): criterion is SpeedyCriterion => Boolean(criterion))
 
 const protectionAttentionSummaries = {
   calm: {
@@ -272,6 +369,11 @@ const summaryByVariant = {
     { icon: cdxIconTray, value: '1', label: 'notice', strong: true },
     { icon: cdxIconRecentChanges, value: '4', label: 'changes' },
   ],
+  'prototype-v2': [
+    { icon: cdxIconBell, value: '0', label: 'alerts' },
+    { icon: cdxIconTray, value: '1', label: 'notice', strong: true },
+    { icon: cdxIconRecentChanges, value: '4', label: 'changes' },
+  ],
 } satisfies Record<DashboardVariantId, { icon: Icon; value: string; label: string; strong?: boolean }[]>
 
 const tasks = ref<Task[]>([
@@ -329,21 +431,61 @@ const activeVariantId = ref<DashboardVariantId>(getInitialVariant())
 const activeCardTreatmentId = ref<CardTreatmentId>(getInitialCardTreatment())
 const activeProtectionState = ref<ProtectionCardState>(getInitialProtectionState())
 const activeSpeedyState = ref<SpeedyCardState>(getInitialSpeedyState())
+const activeCriteria = ref<string[]>(getInitialCriteria())
+const criterionSheetOpen = ref(false)
+const modalSearchQuery = ref('')
 const optionAProtectionViewOpen = ref(getInitialVariant() === 'option-a' && getInitialModule() === 'protection')
 const optionBProtectionViewOpen = ref(isAdminPrototypeVariantId(getInitialVariant()) && getInitialModule() === 'protection')
 const optionBSpeedyViewOpen = ref(isAdminPrototypeVariantId(getInitialVariant()) && getInitialModule() === 'speedy')
 const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? tasks.value[0])
 const activeVariant = computed(() => variants.find((variant) => variant.id === activeVariantId.value) ?? variants[0])
+const displayedVariants = computed(() => variants.slice().reverse())
 const activeCardTreatment = computed(() => cardTreatments.find((treatment) => treatment.id === activeCardTreatmentId.value) ?? cardTreatments[0])
+const selectedCardTreatmentId = computed<CardTreatmentId>({
+  get: () => activeCardTreatmentId.value,
+  set: (value) => selectCardTreatment(value),
+})
+const selectedProtectionState = computed<ProtectionCardState>({
+  get: () => activeProtectionState.value,
+  set: (value) => selectProtectionState(value),
+})
+const selectedSpeedyState = computed<SpeedyCardState>({
+  get: () => activeSpeedyState.value,
+  set: (value) => selectSpeedyState(value),
+})
 const usesCurrentDashboardTreatment = computed(() => activeVariant.value.id === 'base' || activeVariant.value.id === 'option-a' || isAdminPrototypeVariantId(activeVariant.value.id))
 const isOptionAVariant = computed(() => activeVariant.value.id === 'option-a')
 const isOptionBVariant = computed(() => isAdminPrototypeVariantId(activeVariant.value.id))
-const isLatestPrototypeVariant = computed(() => activeVariant.value.id === 'current')
-const isEvidenceCardTreatment = computed(() => isLatestPrototypeVariant.value && activeCardTreatment.value.id === 'cards-evidence')
-const isAttentionCardTreatment = computed(() => isLatestPrototypeVariant.value && activeCardTreatment.value.id === 'cards-attention')
+const isCardDirectionVariant = computed(() => isCardDirectionVariantId(activeVariant.value.id))
+const isEvidenceCardTreatment = computed(() => isCardDirectionVariant.value && activeCardTreatment.value.id === 'cards-evidence')
+const isAttentionCardTreatment = computed(() => isCardDirectionVariant.value && isStatefulCardTreatment(activeCardTreatment.value.id))
+const usesPrototypeV2EvidenceFooter = computed(() => activeVariant.value.id === 'prototype-v2' && isAttentionCardTreatment.value)
+const usesPrototypeV2ProtectionCardVisuals = computed(() => activeVariant.value.id === 'prototype-v2' && isAttentionCardTreatment.value)
+const usesPrototypeV2UrgencyCalibration = computed(() => activeVariant.value.id === 'prototype-v2' && isAttentionCardTreatment.value)
 const activeProtectionAttentionSummary = computed(() => protectionAttentionSummaries[activeProtectionState.value])
 const activeSpeedyAttentionSummary = computed(() => speedyAttentionSummaries[activeSpeedyState.value])
-const cardTreatmentClass = computed(() => isLatestPrototypeVariant.value ? `moderator-dashboard--${activeCardTreatment.value.id}` : '')
+const isProtectionHomeAlarm = computed(() =>
+  activeProtectionAttentionSummary.value.needsAttention &&
+  !usesPrototypeV2UrgencyCalibration.value
+)
+const isSpeedyHomeAlarm = computed(() =>
+  activeSpeedyAttentionSummary.value.needsAttention &&
+  (
+    usesPrototypeV2UrgencyCalibration.value
+      ? activeSpeedyState.value === 'contested'
+      : true
+  )
+)
+const isProtectionHomeNeutralTimeSignal = computed(() =>
+  usesPrototypeV2UrgencyCalibration.value &&
+  activeProtectionAttentionSummary.value.needsAttention
+)
+const isSpeedyHomeNeutralTimeSignal = computed(() =>
+  usesPrototypeV2UrgencyCalibration.value &&
+  activeSpeedyAttentionSummary.value.needsAttention &&
+  activeSpeedyState.value !== 'contested'
+)
+const cardTreatmentClass = computed(() => isCardDirectionVariant.value ? `moderator-dashboard--${activeCardTreatment.value.id}` : '')
 const isOptionAProtectionDetail = computed(() => isOptionAVariant.value && optionAProtectionViewOpen.value)
 const isOptionBProtectionDetail = computed(() => isOptionBVariant.value && optionBProtectionViewOpen.value)
 const isOptionBSpeedyDetail = computed(() => isOptionBVariant.value && optionBSpeedyViewOpen.value)
@@ -353,15 +495,25 @@ const summaryItems = computed(() => summaryByVariant[activeVariant.value.id])
 const visibleTasks = computed(() => tasks.value.filter((task) => task.status !== 'already-handled'))
 
 const protectionSortItems = [
-  { value: 'hot', label: 'Active disruption first' },
-  { value: 'unanswered', label: 'No admin reply first' },
-  { value: 'multi', label: 'Most editors involved' },
+  { value: 'most-active', label: 'Most active' },
   { value: 'oldest', label: 'Waiting longest' },
   { value: 'newest', label: 'Recently requested' },
 ]
 const protectionSortValue = ref(
-  activeCardTreatmentId.value === 'cards-attention' ? getDefaultProtectionSort(activeProtectionState.value) : 'hot'
+  isStatefulCardTreatment(activeCardTreatmentId.value) ? getDefaultProtectionSort(activeProtectionState.value) : 'most-active'
 )
+
+const pinnedProtectionCategories = [
+  'Vandalism',
+  'Edit warring',
+  'BLP',
+  'Sockpuppetry',
+  'Disruptive editing',
+  'Arbitration',
+  'Paid · Recreation',
+  'High-risk template',
+] as const
+const activeProtectionCategories = ref<string[]>([])
 
 const optionBProtectionRequests: ProtectionRequestCard[] = [
   {
@@ -370,8 +522,8 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     visibility: '12k views/day · ↑ 4× this week',
     requestSummary: 'Semi-protection requested for 1 week',
     requesterQuote: 'Repeated disruptive edits by multiple new and anonymous editors.',
-    signalLabel: 'Active disruption',
-    signalLine: 'Last revert 12m ago · 5 actors · 24 reverts in 6h',
+    signalLabel: 'Edit warring',
+    signalLine: '24 reverts in 6h · last revert 12m ago',
     status: 'No admin reply',
     activeScore: 100,
     actorCount: 5,
@@ -383,8 +535,8 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     visibility: '80 views/day · stable',
     requestSummary: 'Talk-page semi-protection requested indefinitely',
     requesterQuote: 'Off-topic suicide-encouragement re-posts after we cleared the page two weeks ago.',
-    signalLabel: 'Discussion quiet',
-    signalLine: 'Last activity 18h ago · 3 participants · 5 comments in 1d',
+    signalLabel: 'Disruptive editing',
+    signalLine: '5 off-topic posts in 24h · last 18h ago',
     status: 'Waiting on requester',
     activeScore: 10,
     actorCount: 3,
@@ -396,8 +548,8 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     visibility: '9.4k views/day · steady',
     requestSummary: 'Indefinite semi-protection requested',
     requesterQuote: 'Repeated diagnosis-claims about named living people. Diffs supplied. BLP risk.',
-    signalLabel: 'Recurring vandalism',
-    signalLine: 'Repeated diagnosis claims · recent diffs supplied',
+    signalLabel: 'BLP',
+    signalLine: '4 named-person edits · 9 reverts in 24h',
     status: 'No admin reply',
     activeScore: 70,
     actorCount: 3,
@@ -409,11 +561,11 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     visibility: '120 views/day · low traffic',
     requestSummary: 'Temporary semi-protection requested',
     requesterQuote: 'Persistent IP socking adds unsourced material after each warning. Temp account already blocked but disruption continues.',
-    signalLabel: 'Sourcing disruption',
-    signalLine: 'Unsourced additions · blocked temp account involved',
+    signalLabel: 'Sockpuppetry',
+    signalLine: '3 IPs · 1 temp account blocked · 8 reverts in 48h',
     status: 'No admin reply',
     activeScore: 45,
-    actorCount: 2,
+    actorCount: 4,
     ageHours: 22,
   },
   {
@@ -423,7 +575,7 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     requestSummary: 'Temporary full protection requested',
     requesterQuote: 'Talk-page dispute over plot wording. Multiple editors won\'t accept the consensus version.',
     signalLabel: 'Edit warring',
-    signalLine: 'Talk-page dispute · multiple editors oppose changes',
+    signalLine: '14 reverts in 12h · 22-comment talk thread',
     status: 'Discussion active',
     activeScore: 55,
     actorCount: 6,
@@ -435,11 +587,11 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     visibility: '900 views/day · rising',
     requestSummary: 'Semi-protection requested',
     requesterQuote: 'Vandalism resumed immediately after the previous protection expired.',
-    signalLabel: 'Protection expired',
-    signalLine: 'Vandalism resumed immediately after expiry',
+    signalLabel: 'Vandalism',
+    signalLine: 'Protection expired 2h ago · 7 reverts since',
     status: 'No admin reply',
     activeScore: 85,
-    actorCount: 4,
+    actorCount: 3,
     ageHours: 2,
   },
 ]
@@ -451,42 +603,72 @@ const showProtectionOverTargetHeader = computed(() =>
   protectionSortValue.value === 'oldest'
 )
 
+const protectionCategoryCounts = computed(() => {
+  const counts = new Map<string, number>()
+  for (const cat of pinnedProtectionCategories) {
+    counts.set(cat, 0)
+  }
+  for (const r of optionBProtectionRequests) {
+    counts.set(r.signalLabel, (counts.get(r.signalLabel) ?? 0) + 1)
+  }
+  return counts
+})
+const filteredOptionBProtectionRequests = computed(() => {
+  if (activeProtectionCategories.value.length === 0) {
+    return optionBProtectionRequests as readonly ProtectionRequestCard[]
+  }
+  const set = new Set(activeProtectionCategories.value)
+  return optionBProtectionRequests.filter((r) => set.has(r.signalLabel))
+})
 const sortedOptionBProtectionRequests = computed(() => {
-  const requests = [...optionBProtectionRequests]
-  const byActive = (a: ProtectionRequestCard, b: ProtectionRequestCard) => b.activeScore - a.activeScore
+  const requests = [...filteredOptionBProtectionRequests.value]
+  const byMostActive = (a: ProtectionRequestCard, b: ProtectionRequestCard) =>
+    b.activeScore - a.activeScore ||
+    b.actorCount - a.actorCount ||
+    b.ageHours - a.ageHours
 
   switch (protectionSortValue.value) {
-    case 'unanswered':
-      return requests.sort((a, b) =>
-        Number(b.status === 'No admin reply') - Number(a.status === 'No admin reply') ||
-        byActive(a, b)
-      )
-    case 'multi':
-      return requests.sort((a, b) => b.actorCount - a.actorCount || byActive(a, b))
     case 'oldest':
-      return requests.sort((a, b) => b.ageHours - a.ageHours || byActive(a, b))
+      return requests.sort((a, b) => b.ageHours - a.ageHours || byMostActive(a, b))
     case 'newest':
-      return requests.sort((a, b) => a.ageHours - b.ageHours || byActive(a, b))
-    case 'hot':
+      return requests.sort((a, b) => a.ageHours - b.ageHours || byMostActive(a, b))
+    case 'most-active':
     default:
-      return requests.sort(byActive)
+      return requests.sort(byMostActive)
   }
 })
+
+function getProtectionCategoryCount(cat: string) {
+  return protectionCategoryCounts.value.get(cat) ?? 0
+}
+
+function toggleProtectionCategory(cat: string) {
+  const idx = activeProtectionCategories.value.indexOf(cat)
+  if (idx === -1) {
+    activeProtectionCategories.value = [...activeProtectionCategories.value, cat]
+  } else {
+    activeProtectionCategories.value = activeProtectionCategories.value.filter((c) => c !== cat)
+  }
+}
+
+function clearProtectionCategoryFilters() {
+  activeProtectionCategories.value = []
+}
 
 const speedySortItems = [
   { value: 'contested', label: 'Contested first' },
   { value: 'newest', label: 'Recently tagged' },
   { value: 'oldest', label: 'Waiting longest' },
-  { value: 'criterion', label: 'By speedy reason' },
 ]
 const speedySortValue = ref(
-  activeCardTreatmentId.value === 'cards-attention' ? getDefaultSpeedySort(activeSpeedyState.value) : 'contested'
+  isStatefulCardTreatment(activeCardTreatmentId.value) ? getDefaultSpeedySort(activeSpeedyState.value) : 'contested'
 )
 
 const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
   {
     id: 'smith-industries',
     title: 'Smith Industries Holdings Ltd',
+    criterionCode: 'G11',
     criterion: 'G11 · Advertising',
     visibility: '42 views in last hour',
     requestSummary: 'Tagged 14m ago · company-style article',
@@ -497,11 +679,11 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
     ageMinutes: 14,
     contested: true,
     decisionScore: 90,
-    criterionOrder: 2,
   },
   {
     id: 'regional-innovation',
     title: 'Regional innovation timeline',
+    criterionCode: 'G15',
     criterion: 'G15 · Unreviewed LLM content',
     visibility: '90 views · contested',
     requestSummary: 'Tagged 3h ago · disputed on talk page',
@@ -512,11 +694,11 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
     ageMinutes: 180,
     contested: true,
     decisionScore: 80,
-    criterionOrder: 3,
   },
   {
     id: 'henrik-olsen',
     title: 'Henrik Olsen (footballer)',
+    criterionCode: 'A1',
     criterion: 'A1 · No context',
     visibility: '4 views · new page',
     requestSummary: 'Tagged 2m after page creation',
@@ -527,11 +709,11 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
     ageMinutes: 2,
     contested: false,
     decisionScore: 30,
-    criterionOrder: 1,
   },
   {
     id: 'orphan-template',
     title: 'Talk:Discontinued template (orphan)',
+    criterionCode: 'G6',
     criterion: 'G6 · Housekeeping',
     visibility: 'Housekeeping page · low traffic',
     requestSummary: 'Tagged 1d ago · target template deleted',
@@ -542,25 +724,73 @@ const optionBSpeedyDeletionRequests: SpeedyDeletionCard[] = [
     ageMinutes: 1440,
     contested: false,
     decisionScore: 10,
-    criterionOrder: 4,
   },
 ]
 
-const speedyContestedCount = computed(() => optionBSpeedyDeletionRequests.filter((request) => request.contested).length)
-const speedyStaleCount = computed(() => optionBSpeedyDeletionRequests.filter((request) => request.ageMinutes > 360).length)
-const showSpeedyContestedHeader = computed(() =>
+const showPrototypeV2SpeedyCriterionFilter = computed(() =>
+  activeVariant.value.id === 'prototype-v2' &&
   isAttentionCardTreatment.value &&
-  activeSpeedyState.value === 'contested' &&
-  speedySortValue.value === 'contested'
+  optionBSpeedyViewOpen.value
 )
-const showSpeedyStaleHeader = computed(() =>
-  isAttentionCardTreatment.value &&
-  activeSpeedyState.value === 'stale' &&
-  speedySortValue.value === 'oldest'
+const hasActiveCriteriaFilter = computed(() => activeCriteria.value.length > 0)
+const hasAnyActiveFilter = computed(() => hasActiveCriteriaFilter.value)
+const isPrototypeV2SpeedyCriterionFiltered = computed(() =>
+  showPrototypeV2SpeedyCriterionFilter.value && hasAnyActiveFilter.value
+)
+const visibleChipCodes = computed(() => {
+  const codes = [...pinnedCriterionCodes] as string[]
+  for (const code of activeCriteria.value) {
+    if (!codes.includes(code)) {
+      codes.push(code)
+    }
+  }
+  return codes
+})
+const criteriaByNamespace = computed(() =>
+  criterionNamespaces.map((namespace) => ({
+    namespace,
+    label: criterionNamespaceLabels[namespace],
+    criteria: speedyCriteria.filter((criterion) => criterion.namespace === namespace),
+  }))
+)
+const filteredCriteriaByNamespace = computed(() => {
+  const query = modalSearchQuery.value.trim().toLowerCase()
+  if (!query) {
+    return criteriaByNamespace.value
+  }
+  return criteriaByNamespace.value
+    .map((group) => ({
+      ...group,
+      criteria: group.criteria.filter(
+        (c) => c.code.toLowerCase().includes(query) || c.name.toLowerCase().includes(query)
+      ),
+    }))
+    .filter((group) => group.criteria.length > 0)
+})
+const criterionCounts = computed(() => {
+  const counts = new Map<string, number>()
+  speedyCriteria.forEach((criterion) => counts.set(criterion.code, 0))
+  optionBSpeedyDeletionRequests.forEach((request) => {
+    counts.set(request.criterionCode, (counts.get(request.criterionCode) ?? 0) + 1)
+  })
+  return counts
+})
+const allCriterionCount = computed(() => optionBSpeedyDeletionRequests.length)
+const filteredOptionBSpeedyDeletionRequests = computed(() => {
+  if (!hasActiveCriteriaFilter.value) {
+    return optionBSpeedyDeletionRequests
+  }
+  const set = new Set(activeCriteria.value)
+  return optionBSpeedyDeletionRequests.filter((r) => set.has(r.criterionCode))
+})
+const showSpeedyCriterionEmptyState = computed(() =>
+  showPrototypeV2SpeedyCriterionFilter.value &&
+  hasAnyActiveFilter.value &&
+  sortedOptionBSpeedyDeletionRequests.value.length === 0
 )
 
 const sortedOptionBSpeedyDeletionRequests = computed(() => {
-  const requests = [...optionBSpeedyDeletionRequests]
+  const requests = [...filteredOptionBSpeedyDeletionRequests.value]
 
   switch (speedySortValue.value) {
     case 'contested':
@@ -570,11 +800,6 @@ const sortedOptionBSpeedyDeletionRequests = computed(() => {
       )
     case 'oldest':
       return requests.sort((a, b) => b.ageMinutes - a.ageMinutes)
-    case 'criterion':
-      return requests.sort((a, b) =>
-        a.criterionOrder - b.criterionOrder ||
-        a.ageMinutes - b.ageMinutes
-      )
     case 'newest':
     default:
       return requests.sort((a, b) => a.ageMinutes - b.ageMinutes)
@@ -586,11 +811,30 @@ function taskIcon(task: Task) {
 }
 
 function isDashboardVariant(value: string | null): value is DashboardVariantId {
-  return value === 'base' || value === 'option-a' || value === 'option-b' || value === 'current'
+  return (
+    value === 'base' ||
+    value === 'option-a' ||
+    value === 'option-b' ||
+    value === 'current' ||
+    value === 'prototype-v2'
+  )
 }
 
 function isCardTreatment(value: string | null): value is CardTreatmentId {
-  return value === 'cards-current' || value === 'cards-compact' || value === 'cards-evidence' || value === 'cards-attention'
+  return (
+    value === 'cards-current' ||
+    value === 'cards-compact' ||
+    value === 'cards-evidence' ||
+    value === 'cards-attention'
+  )
+}
+
+function isStatefulCardTreatment(value: CardTreatmentId) {
+  return value === 'cards-attention'
+}
+
+function isCardDirectionVariantId(value: DashboardVariantId) {
+  return value === 'current' || value === 'prototype-v2'
 }
 
 function isProtectionCardState(value: string | null): value is ProtectionCardState {
@@ -601,12 +845,29 @@ function isSpeedyCardState(value: string | null): value is SpeedyCardState {
   return value === 'calm' || value === 'contested' || value === 'stale'
 }
 
-function isAdminPrototypeVariantId(value: DashboardVariantId) {
-  return value === 'option-b' || value === 'current'
+function getCriterionCount(code: string) {
+  return criterionCounts.value.get(code) ?? 0
 }
 
-function getDefaultProtectionSort(state: ProtectionCardState) {
-  return state === 'stale' ? 'oldest' : 'hot'
+function normalizeCriteriaSelection(value: string | null): string[] {
+  if (!value) {
+    return []
+  }
+
+  const codes = value
+    .split(',')
+    .map((part) => part.trim().toUpperCase())
+    .filter((code) => code && speedyCriteria.some((c) => c.code === code))
+
+  return Array.from(new Set(codes))
+}
+
+function isAdminPrototypeVariantId(value: DashboardVariantId) {
+  return value === 'option-b' || value === 'current' || value === 'prototype-v2'
+}
+
+function getDefaultProtectionSort(_state: ProtectionCardState) {
+  return 'most-active'
 }
 
 function getDefaultSpeedySort(state: SpeedyCardState) {
@@ -622,7 +883,29 @@ function getDefaultSpeedySort(state: SpeedyCardState) {
 }
 
 function isProtectionRequestUrgent(request: ProtectionRequestCard) {
+  if (usesPrototypeV2UrgencyCalibration.value) {
+    return false
+  }
+
   return activeProtectionState.value === 'stale' && request.ageHours > 12
+}
+
+function getProtectionSignalRecency(request: ProtectionRequestCard) {
+  const recencyMatch = request.signalLine.match(/\b(?:Last revert|Last activity|Tagged) (\d+[mh] ago)/)
+  return recencyMatch?.[1] ?? `${request.ageHours}h ago`
+}
+
+function getProtectionActorIcon(request: ProtectionRequestCard) {
+  return request.actorCount === 1 ? cdxIconUserAvatarOutline : cdxIconUserGroup
+}
+
+function getProtectionSignalStats(request: ProtectionRequestCard) {
+  const stats = request.signalLine
+    .split(' · ')
+    .map((part) => part.trim())
+    .filter((part) => part && !/^(?:Last revert|Last activity|Tagged) \d+[mh] ago$/.test(part))
+
+  return stats.length > 0 ? stats : [request.signalLine]
 }
 
 function getSpeedyUrgencyKind(request: SpeedyDeletionCard) {
@@ -630,11 +913,17 @@ function getSpeedyUrgencyKind(request: SpeedyDeletionCard) {
     return null
   }
 
-  if (request.contested) {
+  if (
+    request.contested &&
+    (
+      !usesPrototypeV2UrgencyCalibration.value ||
+      activeSpeedyState.value === 'contested'
+    )
+  ) {
     return 'contested'
   }
 
-  if (activeSpeedyState.value === 'stale' && request.ageMinutes > 360) {
+  if (!usesPrototypeV2UrgencyCalibration.value && activeSpeedyState.value === 'stale' && request.ageMinutes > 360) {
     return 'stale'
   }
 
@@ -706,13 +995,21 @@ function openDeclinePage(title: string, context: 'protection' | 'speedy') {
   })
 }
 
+function openArticlePage(title: string, module: 'protection' | 'speedy') {
+  return router.push({
+    path: '/admin-moderation-dashboard/article',
+    query: { title, module },
+    state: { dashboardReturnTo: route.fullPath },
+  })
+}
+
 function getInitialVariant(): DashboardVariantId {
   if (typeof window === 'undefined') {
-    return 'base'
+    return defaultVariantId
   }
 
   const variant = new URLSearchParams(window.location.search).get('variant')
-  return isDashboardVariant(variant) ? variant : 'base'
+  return isDashboardVariant(variant) ? variant : defaultVariantId
 }
 
 function getInitialModule() {
@@ -725,34 +1022,115 @@ function getInitialModule() {
 
 function getInitialCardTreatment(): CardTreatmentId {
   if (typeof window === 'undefined') {
-    return 'cards-current'
+    return defaultCardTreatmentId
   }
 
   const treatment = new URLSearchParams(window.location.search).get('direction')
-  return isCardTreatment(treatment) ? treatment : 'cards-current'
+  return isCardTreatment(treatment) ? treatment : defaultCardTreatmentId
 }
 
 function getInitialProtectionState(): ProtectionCardState {
   if (typeof window === 'undefined') {
-    return 'stale'
+    return defaultProtectionState
   }
 
   const state = new URLSearchParams(window.location.search).get('protection')
-  return isProtectionCardState(state) ? state : 'stale'
+  return isProtectionCardState(state) ? state : defaultProtectionState
 }
 
 function getInitialSpeedyState(): SpeedyCardState {
   if (typeof window === 'undefined') {
-    return 'contested'
+    return defaultSpeedyState
   }
 
   const state = new URLSearchParams(window.location.search).get('speedy')
-  return isSpeedyCardState(state) ? state : 'contested'
+  return isSpeedyCardState(state) ? state : defaultSpeedyState
 }
+
+function getInitialCriteria(): string[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  return normalizeCriteriaSelection(new URLSearchParams(window.location.search).get('criterion'))
+}
+
+function shouldPreserveCriterionParam(variantId: DashboardVariantId, treatmentId: CardTreatmentId) {
+  return variantId === 'prototype-v2' && isStatefulCardTreatment(treatmentId)
+}
+
+function syncCriterionSearchParam(url: URL, variantId: DashboardVariantId, treatmentId: CardTreatmentId) {
+  if (shouldPreserveCriterionParam(variantId, treatmentId) && activeCriteria.value.length > 0) {
+    url.searchParams.set('criterion', activeCriteria.value.join(','))
+  } else {
+    url.searchParams.delete('criterion')
+  }
+  url.searchParams.delete('contested')
+}
+
+function syncInitialPrototypeSettings() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const url = new URL(window.location.href)
+  let changed = false
+
+  if (!isDashboardVariant(url.searchParams.get('variant'))) {
+    url.searchParams.set('variant', activeVariantId.value)
+    changed = true
+  }
+
+  if (isCardDirectionVariantId(activeVariantId.value)) {
+    if (!isCardTreatment(url.searchParams.get('direction'))) {
+      url.searchParams.set('direction', activeCardTreatmentId.value)
+      changed = true
+    }
+
+    if (isStatefulCardTreatment(activeCardTreatmentId.value)) {
+      if (!isProtectionCardState(url.searchParams.get('protection'))) {
+        url.searchParams.set('protection', activeProtectionState.value)
+        changed = true
+      }
+
+      if (!isSpeedyCardState(url.searchParams.get('speedy'))) {
+        url.searchParams.set('speedy', activeSpeedyState.value)
+        changed = true
+      }
+    } else {
+      if (url.searchParams.has('protection') || url.searchParams.has('speedy')) {
+        url.searchParams.delete('protection')
+        url.searchParams.delete('speedy')
+        changed = true
+      }
+    }
+  } else if (
+    url.searchParams.has('direction') ||
+    url.searchParams.has('protection') ||
+    url.searchParams.has('speedy')
+  ) {
+    url.searchParams.delete('direction')
+    url.searchParams.delete('protection')
+    url.searchParams.delete('speedy')
+    changed = true
+  }
+
+  const searchBeforeCriterionSync = url.search
+  syncCriterionSearchParam(url, activeVariantId.value, activeCardTreatmentId.value)
+
+  if (url.search !== searchBeforeCriterionSync) {
+    changed = true
+  }
+
+  if (changed) {
+    window.history.replaceState({}, '', url)
+  }
+}
+
+onMounted(syncInitialPrototypeSettings)
 
 function selectVariant(variantId: DashboardVariantId) {
   activeVariantId.value = variantId
-  variantSwitcherOpen.value = false
   optionAProtectionViewOpen.value = false
   optionBProtectionViewOpen.value = false
   optionBSpeedyViewOpen.value = false
@@ -764,9 +1142,9 @@ function selectVariant(variantId: DashboardVariantId) {
   const url = new URL(window.location.href)
   url.searchParams.set('variant', variantId)
   url.searchParams.delete('module')
-  if (variantId === 'current') {
+  if (isCardDirectionVariantId(variantId)) {
     url.searchParams.set('direction', activeCardTreatmentId.value)
-    if (activeCardTreatmentId.value === 'cards-attention') {
+    if (isStatefulCardTreatment(activeCardTreatmentId.value)) {
       url.searchParams.set('protection', activeProtectionState.value)
       url.searchParams.set('speedy', activeSpeedyState.value)
     } else {
@@ -778,11 +1156,14 @@ function selectVariant(variantId: DashboardVariantId) {
     url.searchParams.delete('protection')
     url.searchParams.delete('speedy')
   }
+  syncCriterionSearchParam(url, variantId, activeCardTreatmentId.value)
   window.history.replaceState({}, '', url)
 }
 
 function selectCardTreatment(treatmentId: CardTreatmentId) {
-  activeVariantId.value = 'current'
+  if (!isCardDirectionVariantId(activeVariantId.value)) {
+    activeVariantId.value = 'current'
+  }
   activeCardTreatmentId.value = treatmentId
 
   if (typeof window === 'undefined') {
@@ -790,9 +1171,9 @@ function selectCardTreatment(treatmentId: CardTreatmentId) {
   }
 
   const url = new URL(window.location.href)
-  url.searchParams.set('variant', 'current')
+  url.searchParams.set('variant', activeVariantId.value)
   url.searchParams.set('direction', treatmentId)
-  if (treatmentId === 'cards-attention') {
+  if (isStatefulCardTreatment(treatmentId)) {
     url.searchParams.set('protection', activeProtectionState.value)
     url.searchParams.set('speedy', activeSpeedyState.value)
   } else {
@@ -800,20 +1181,29 @@ function selectCardTreatment(treatmentId: CardTreatmentId) {
     url.searchParams.delete('speedy')
   }
   url.searchParams.delete('module')
+  syncCriterionSearchParam(url, activeVariantId.value, treatmentId)
   window.history.replaceState({}, '', url)
 }
 
 function selectProtectionState(state: ProtectionCardState) {
-  activeVariantId.value = 'current'
-  activeCardTreatmentId.value = 'cards-attention'
+  if (!isCardDirectionVariantId(activeVariantId.value)) {
+    activeVariantId.value = 'current'
+  }
+  if (!isStatefulCardTreatment(activeCardTreatmentId.value)) {
+    activeCardTreatmentId.value = 'cards-attention'
+  }
   activeProtectionState.value = state
   protectionSortValue.value = getDefaultProtectionSort(state)
   syncCardStateParam('protection', state)
 }
 
 function selectSpeedyState(state: SpeedyCardState) {
-  activeVariantId.value = 'current'
-  activeCardTreatmentId.value = 'cards-attention'
+  if (!isCardDirectionVariantId(activeVariantId.value)) {
+    activeVariantId.value = 'current'
+  }
+  if (!isStatefulCardTreatment(activeCardTreatmentId.value)) {
+    activeCardTreatmentId.value = 'cards-attention'
+  }
   activeSpeedyState.value = state
   speedySortValue.value = getDefaultSpeedySort(state)
   syncCardStateParam('speedy', state)
@@ -825,10 +1215,51 @@ function syncCardStateParam(param: 'protection' | 'speedy', value: ProtectionCar
   }
 
   const url = new URL(window.location.href)
-  url.searchParams.set('variant', 'current')
-  url.searchParams.set('direction', 'cards-attention')
+  const variantId = isCardDirectionVariantId(activeVariantId.value) ? activeVariantId.value : 'current'
+  const treatmentId = isStatefulCardTreatment(activeCardTreatmentId.value) ? activeCardTreatmentId.value : 'cards-attention'
+  url.searchParams.set(
+    'variant',
+    variantId,
+  )
+  url.searchParams.set(
+    'direction',
+    treatmentId,
+  )
   url.searchParams.set(param, value)
   url.searchParams.delete('module')
+  syncCriterionSearchParam(url, variantId, treatmentId)
+  window.history.replaceState({}, '', url)
+}
+
+function toggleCriterion(code: string) {
+  const idx = activeCriteria.value.indexOf(code)
+  if (idx === -1) {
+    activeCriteria.value = [...activeCriteria.value, code]
+  } else {
+    activeCriteria.value = activeCriteria.value.filter((c) => c !== code)
+  }
+  syncCriterionParam()
+}
+
+function clearAllFilters() {
+  activeCriteria.value = []
+  syncCriterionParam()
+}
+
+function openCriterionSheet() {
+  modalSearchQuery.value = ''
+  criterionSheetOpen.value = true
+}
+
+function syncCriterionParam() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const url = new URL(window.location.href)
+  url.searchParams.set('variant', 'prototype-v2')
+  url.searchParams.set('direction', 'cards-attention')
+  syncCriterionSearchParam(url, 'prototype-v2', 'cards-attention')
   window.history.replaceState({}, '', url)
 }
 
@@ -853,7 +1284,7 @@ function openOptionBProtection(event: MouseEvent) {
   }
 
   event.preventDefault()
-  protectionSortValue.value = isAttentionCardTreatment.value ? getDefaultProtectionSort(activeProtectionState.value) : 'hot'
+  protectionSortValue.value = isAttentionCardTreatment.value ? getDefaultProtectionSort(activeProtectionState.value) : 'most-active'
   optionBProtectionViewOpen.value = true
   syncModuleParam('protection')
 }
@@ -886,6 +1317,7 @@ function syncModuleParam(value: string | null) {
   } else {
     url.searchParams.set('module', value)
   }
+  syncCriterionSearchParam(url, activeVariantId.value, activeCardTreatmentId.value)
   window.history.replaceState({}, '', url)
   window.scrollTo({ top: 0 })
 }
@@ -899,27 +1331,49 @@ function variantOptionLabel(variantId: DashboardVariantId) {
     case 'option-b':
       return 'Prototype v0'
     case 'current':
-      return 'Prototype v1 (latest)'
+      return 'Prototype v1'
+    case 'prototype-v2':
+      return 'Prototype v2 (latest)'
   }
 }
 </script>
 
 <template>
-  <ChromeWrapper skin="mobile" lang="en" dir="ltr">
+  <ChromeWrapper
+    skin="mobile"
+    lang="en"
+    dir="ltr"
+  >
     <template #header>
       <header class="mock-minerva-header">
-        <CdxButton weight="quiet" aria-label="Main menu">
+        <CdxButton
+          weight="quiet"
+          aria-label="Main menu"
+        >
           <CdxIcon :icon="cdxIconMenu" />
         </CdxButton>
-        <a class="mock-minerva-header__brand" href="#">mwdd-en</a>
+        <a
+          class="mock-minerva-header__brand"
+          href="#"
+        >mwdd-en</a>
         <div class="mock-minerva-header__actions">
-          <CdxButton weight="quiet" aria-label="Search">
+          <CdxButton
+            weight="quiet"
+            aria-label="Search"
+          >
             <CdxIcon :icon="cdxIconSearch" />
           </CdxButton>
-          <button class="mock-minerva-header__notification-count" type="button" aria-label="Notifications">
+          <button
+            class="mock-minerva-header__notification-count"
+            type="button"
+            aria-label="Notifications"
+          >
             1
           </button>
-          <CdxButton weight="quiet" aria-label="User menu">
+          <CdxButton
+            weight="quiet"
+            aria-label="User menu"
+          >
             <CdxIcon :icon="cdxIconUserAvatarOutline" />
           </CdxButton>
         </div>
@@ -956,7 +1410,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
     >
       <template v-if="usesCurrentDashboardTreatment">
         <template v-if="isOptionAProtectionDetail">
-          <section class="personal-dashboard-detail" aria-labelledby="option-a-protection-heading">
+          <section
+            class="personal-dashboard-detail"
+            aria-labelledby="option-a-protection-heading"
+          >
             <header class="personal-dashboard-detail__header">
               <CdxButton
                 aria-label="Back to dashboard"
@@ -965,7 +1422,9 @@ function variantOptionLabel(variantId: DashboardVariantId) {
               >
                 <CdxIcon :icon="cdxIconPrevious" />
               </CdxButton>
-              <h1 id="option-a-protection-heading">Protection requests</h1>
+              <h1 id="option-a-protection-heading">
+                Protection requests
+              </h1>
             </header>
 
             <div class="personal-dashboard-detail__body">
@@ -987,10 +1446,15 @@ function variantOptionLabel(variantId: DashboardVariantId) {
 
               <div class="personal-dashboard-detail__requests">
                 <article class="personal-dashboard-detail__request">
-                  <h2 class="personal-dashboard-detail__title-line">Eurovision Song Contest Asia</h2>
+                  <h2 class="personal-dashboard-detail__title-line">
+                    Eurovision Song Contest Asia
+                  </h2>
                   <p class="personal-dashboard-detail__importance">
                     <span class="personal-dashboard-detail__importance-item">
-                      <CdxIcon :icon="cdxIconEye" size="small" />
+                      <CdxIcon
+                        :icon="cdxIconEye"
+                        size="small"
+                      />
                       12k views/day · ↑ 4× this week
                     </span>
                   </p>
@@ -1009,10 +1473,15 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                 </article>
 
                 <article class="personal-dashboard-detail__request">
-                  <h2 class="personal-dashboard-detail__title-line">Talk:Blue Whale Challenge</h2>
+                  <h2 class="personal-dashboard-detail__title-line">
+                    Talk:Blue Whale Challenge
+                  </h2>
                   <p class="personal-dashboard-detail__importance">
                     <span class="personal-dashboard-detail__importance-item">
-                      <CdxIcon :icon="cdxIconEye" size="small" />
+                      <CdxIcon
+                        :icon="cdxIconEye"
+                        size="small"
+                      />
                       80 views/day · stable
                     </span>
                   </p>
@@ -1029,14 +1498,16 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                     Waiting on requester
                   </p>
                 </article>
-
               </div>
             </div>
           </section>
         </template>
 
         <template v-else-if="isOptionBProtectionDetail">
-          <section class="personal-dashboard-detail" aria-labelledby="option-b-protection-detail-heading">
+          <section
+            class="personal-dashboard-detail"
+            aria-labelledby="option-b-protection-detail-heading"
+          >
             <header class="personal-dashboard-detail__header">
               <CdxButton
                 aria-label="Back to dashboard"
@@ -1045,21 +1516,106 @@ function variantOptionLabel(variantId: DashboardVariantId) {
               >
                 <CdxIcon :icon="cdxIconPrevious" />
               </CdxButton>
-              <h1 id="option-b-protection-detail-heading">Pages for protection</h1>
+              <h1 id="option-b-protection-detail-heading">
+                Pages for protection
+              </h1>
             </header>
 
             <div class="personal-dashboard-detail__body">
-              <div class="personal-dashboard-detail__toolbar">
+              <div
+                v-if="usesPrototypeV2ProtectionCardVisuals"
+                class="personal-dashboard-detail__list-toolbar"
+              >
+                <div class="personal-dashboard-detail__chip-strip-wrapper">
+                  <div
+                    class="personal-dashboard-detail__chip-strip"
+                    :class="{ 'personal-dashboard-detail__chip-strip--has-clear': activeProtectionCategories.length > 0 }"
+                    role="group"
+                    aria-label="Filter by protection request category"
+                  >
+                    <CdxButton
+                      class="personal-dashboard-detail__chip"
+                      :class="{ 'personal-dashboard-detail__chip--active': activeProtectionCategories.length === 0 }"
+                      :aria-pressed="activeProtectionCategories.length === 0"
+                      weight="normal"
+                      @click="clearProtectionCategoryFilters"
+                    >
+                      <span class="personal-dashboard-detail__chip-label">All</span>
+                      <span class="personal-dashboard-detail__chip-count">{{ optionBProtectionRequests.length }}</span>
+                    </CdxButton>
+                    <CdxButton
+                      v-for="cat in pinnedProtectionCategories"
+                      :key="cat"
+                      class="personal-dashboard-detail__chip"
+                      :class="{
+                        'personal-dashboard-detail__chip--active': activeProtectionCategories.includes(cat),
+                        'personal-dashboard-detail__chip--empty': getProtectionCategoryCount(cat) === 0,
+                      }"
+                      :aria-pressed="activeProtectionCategories.includes(cat)"
+                      weight="normal"
+                      @click="toggleProtectionCategory(cat)"
+                    >
+                      <span class="personal-dashboard-detail__chip-label">{{ cat }}</span>
+                      <span
+                        v-if="getProtectionCategoryCount(cat) > 0"
+                        class="personal-dashboard-detail__chip-count"
+                      >{{ getProtectionCategoryCount(cat) }}</span>
+                    </CdxButton>
+                  </div>
+
+                  <div
+                    v-if="activeProtectionCategories.length > 0"
+                    class="personal-dashboard-detail__chip-clear-fade"
+                    aria-hidden="true"
+                  />
+                  <CdxButton
+                    v-if="activeProtectionCategories.length > 0"
+                    class="personal-dashboard-detail__chip-clear"
+                    weight="quiet"
+                    aria-label="Clear all filters"
+                    @click="clearProtectionCategoryFilters"
+                  >
+                    <CdxIcon
+                      :icon="cdxIconClose"
+                      size="x-small"
+                    />
+                  </CdxButton>
+                </div>
+
+                <label class="personal-dashboard-detail__sort-menu-row">
+                  <span class="personal-dashboard-detail__sort-menu-label">Sort by</span>
+                  <CdxSelect
+                    class="personal-dashboard-detail__sort-menu"
+                    :menu-items="protectionSortItems"
+                    :selected="protectionSortValue"
+                    aria-label="Sort by"
+                    @update:selected="protectionSortValue = $event"
+                  />
+                </label>
+              </div>
+
+              <div
+                v-else
+                class="personal-dashboard-detail__toolbar"
+              >
                 <p
                   v-if="isAttentionCardTreatment && activeProtectionState === 'stale'"
                   class="personal-dashboard-detail__lede-line"
                 >
-                  <strong class="personal-dashboard-detail__lede-alert">
+                  <strong
+                    :class="{
+                      'personal-dashboard-detail__lede-alert': !usesPrototypeV2UrgencyCalibration,
+                      'personal-dashboard-detail__lede-neutral': usesPrototypeV2UrgencyCalibration,
+                    }"
+                  >
                     {{ overTargetProtectionCount }} over 12h target
                   </strong>
                   · <strong>17</strong> total open · <strong>6</strong> no admin reply
                 </p>
-                <p v-else class="personal-dashboard-detail__lede-line">
+                <p
+                  v-else
+                  class="personal-dashboard-detail__lede-line"
+                >
                   <strong>17</strong> unresolved · <strong>6</strong> no admin reply
                 </p>
                 <div class="personal-dashboard-detail__sort-row">
@@ -1078,6 +1634,7 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                 <p
                   v-if="showProtectionOverTargetHeader"
                   class="personal-dashboard-detail__group-heading"
+                  :class="{ 'personal-dashboard-detail__group-heading--neutral': usesPrototypeV2UrgencyCalibration }"
                 >
                   Over 12h target ({{ overTargetProtectionCount }})
                 </p>
@@ -1097,10 +1654,41 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                     >
                       {{ request.ageHours }}h · over target
                     </CdxInfoChip>
-                    <h2 class="personal-dashboard-detail__title-line">{{ request.title }}</h2>
+                    <div
+                      v-if="usesPrototypeV2ProtectionCardVisuals"
+                      class="personal-dashboard-detail__category-row"
+                    >
+                      <span
+                        class="personal-dashboard-detail__category-eyebrow"
+                      >
+                        {{ request.signalLabel }} · {{ getProtectionSignalRecency(request) }}
+                      </span>
+                      <span
+                        class="personal-dashboard-detail__actor-pill"
+                        :aria-label="`${request.actorCount} ${request.actorCount === 1 ? 'editor' : 'editors'} involved`"
+                      >
+                        <CdxIcon
+                          class="personal-dashboard-detail__actor-icon"
+                          :icon="getProtectionActorIcon(request)"
+                          size="small"
+                          aria-hidden="true"
+                        />
+                        {{ request.actorCount }}
+                      </span>
+                    </div>
+                    <span
+                      v-else
+                      class="personal-dashboard-detail__category-eyebrow"
+                    >{{ request.signalLabel }}</span>
+                    <h2 class="personal-dashboard-detail__title-line">
+                      {{ request.title }}
+                    </h2>
                     <p class="personal-dashboard-detail__importance">
                       <span class="personal-dashboard-detail__importance-item">
-                        <CdxIcon :icon="cdxIconEye" size="small" />
+                        <CdxIcon
+                          :icon="cdxIconEye"
+                          size="small"
+                        />
                         {{ request.visibility }}
                       </span>
                     </p>
@@ -1108,41 +1696,98 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                       “{{ request.requesterQuote }}”
                     </p>
                     <p
+                      v-if="usesPrototypeV2ProtectionCardVisuals"
+                      class="personal-dashboard-detail__protection-stats"
+                    >
+                      <template
+                        v-for="(stat, index) in getProtectionSignalStats(request)"
+                        :key="stat"
+                      >
+                        <span>{{ stat }}</span>
+                        <span
+                          v-if="index < getProtectionSignalStats(request).length - 1"
+                          class="personal-dashboard-detail__protection-stats-separator"
+                          aria-hidden="true"
+                        >·</span>
+                      </template>
+                    </p>
+                    <p
+                      v-else
                       class="personal-dashboard-detail__system-signal"
                       :class="{ 'personal-dashboard-detail__system-signal--urgent': isProtectionRequestUrgent(request) }"
                     >
-                      <strong>{{ request.signalLabel }}</strong>
-                      · {{ request.signalLine }}
+                      {{ request.signalLine }}
                     </p>
-                    <footer class="personal-dashboard-detail__action-footer">
-                      <CdxButton
-                        class="personal-dashboard-detail__protect-button"
-                        action="progressive"
-                        weight="primary"
-                        size="small"
-                        @click.stop="openProtectForm(request)"
-                      >
-                        Protect
-                      </CdxButton>
-                      <nav class="personal-dashboard-detail__action-links" aria-label="Protection request destinations">
-                        <a href="#" @click.prevent="openHistoryPage(request.title, 'protection')">History</a>
-                        <a href="#" @click.prevent="openRequestPage(request.title, 'protection')">View request</a>
-                        <a
-                          class="personal-dashboard-detail__action-link--workflow"
-                          href="#"
-                          @click.prevent="openDeclinePage(request.title, 'protection')"
+                    <footer
+                      class="personal-dashboard-detail__action-footer"
+                      :class="{ 'personal-dashboard-detail__action-footer--evidence': usesPrototypeV2EvidenceFooter }"
+                    >
+                      <template v-if="usesPrototypeV2EvidenceFooter">
+                        <div class="personal-dashboard-detail__primary-action-row">
+                          <CdxButton
+                            class="personal-dashboard-detail__evidence-button"
+                            action="progressive"
+                            weight="primary"
+                            size="small"
+                            @click.stop="openHistoryPage(request.title, 'protection')"
+                          >
+                            View history
+                          </CdxButton>
+                        </div>
+                        <nav
+                          class="personal-dashboard-detail__action-links"
+                          aria-label="Protection request destinations"
                         >
-                          Decline
-                        </a>
-                      </nav>
+                          <a
+                            href="#"
+                            @click.prevent="openRequestPage(request.title, 'protection')"
+                          >View request</a>
+                        </nav>
+                      </template>
+                      <template v-else>
+                        <CdxButton
+                          class="personal-dashboard-detail__protect-button"
+                          action="progressive"
+                          weight="primary"
+                          size="small"
+                          @click.stop="openProtectForm(request)"
+                        >
+                          Protect
+                        </CdxButton>
+                        <nav
+                          class="personal-dashboard-detail__action-links"
+                          aria-label="Protection request destinations"
+                        >
+                          <a
+                            href="#"
+                            @click.prevent="openHistoryPage(request.title, 'protection')"
+                          >History</a>
+                          <a
+                            href="#"
+                            @click.prevent="openRequestPage(request.title, 'protection')"
+                          >View request</a>
+                          <a
+                            class="personal-dashboard-detail__action-link--workflow"
+                            href="#"
+                            @click.prevent="openDeclinePage(request.title, 'protection')"
+                          >
+                            Decline
+                          </a>
+                        </nav>
+                      </template>
                     </footer>
                   </template>
 
                   <template v-else>
-                    <h2 class="personal-dashboard-detail__title-line">{{ request.title }}</h2>
+                    <h2 class="personal-dashboard-detail__title-line">
+                      {{ request.title }}
+                    </h2>
                     <p class="personal-dashboard-detail__importance">
                       <span class="personal-dashboard-detail__importance-item">
-                        <CdxIcon :icon="cdxIconEye" size="small" />
+                        <CdxIcon
+                          :icon="cdxIconEye"
+                          size="small"
+                        />
                         {{ request.visibility }}
                       </span>
                     </p>
@@ -1166,7 +1811,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
         </template>
 
         <template v-else-if="isOptionBSpeedyDetail">
-          <section class="personal-dashboard-detail" aria-labelledby="option-b-speedy-detail-heading">
+          <section
+            class="personal-dashboard-detail"
+            aria-labelledby="option-b-speedy-detail-heading"
+          >
             <header class="personal-dashboard-detail__header">
               <CdxButton
                 aria-label="Back to dashboard"
@@ -1175,436 +1823,596 @@ function variantOptionLabel(variantId: DashboardVariantId) {
               >
                 <CdxIcon :icon="cdxIconPrevious" />
               </CdxButton>
-              <h1 id="option-b-speedy-detail-heading">Pages for speedy deletion</h1>
+              <h1 id="option-b-speedy-detail-heading">
+                Pages for speedy deletion
+              </h1>
             </header>
 
             <div class="personal-dashboard-detail__body">
-              <div class="personal-dashboard-detail__toolbar">
-                <p
-                  v-if="isAttentionCardTreatment && activeSpeedyState === 'contested'"
-                  class="personal-dashboard-detail__lede-line"
-                >
-                  <strong class="personal-dashboard-detail__lede-alert">
-                    {{ speedyContestedCount }} contested
-                  </strong>
-                  · <strong>4</strong> in queue · <strong>0</strong> over 6h target
-                </p>
-                <p
-                  v-else-if="isAttentionCardTreatment && activeSpeedyState === 'stale'"
-                  class="personal-dashboard-detail__lede-line"
-                >
-                  <strong class="personal-dashboard-detail__lede-alert">
-                    {{ speedyStaleCount }} over 6h target
-                  </strong>
-                  · <strong>4</strong> in queue · <strong>{{ speedyContestedCount }}</strong> contested
-                </p>
-                <p
-                  v-else-if="isAttentionCardTreatment && activeSpeedyState === 'calm'"
-                  class="personal-dashboard-detail__lede-line"
-                >
-                  <strong>4</strong> in queue · <strong>0</strong> contested
-                </p>
-                <p v-else class="personal-dashboard-detail__lede-line">
-                  <strong>4</strong> awaiting review · <strong>2</strong> need decision
-                </p>
-                <div class="personal-dashboard-detail__sort-row">
-                  <span class="personal-dashboard-detail__sort-label">Sort</span>
+              <div
+                v-if="showPrototypeV2SpeedyCriterionFilter"
+                class="personal-dashboard-detail__list-toolbar"
+              >
+                <div class="personal-dashboard-detail__chip-strip-wrapper">
+                  <div
+                    class="personal-dashboard-detail__chip-strip"
+                    :class="{ 'personal-dashboard-detail__chip-strip--has-clear': hasAnyActiveFilter }"
+                    role="group"
+                    aria-label="Filter by speedy deletion criterion"
+                  >
+                    <CdxButton
+                      class="personal-dashboard-detail__chip"
+                      :class="{ 'personal-dashboard-detail__chip--active': !hasAnyActiveFilter }"
+                      :aria-pressed="!hasAnyActiveFilter"
+                      weight="normal"
+                      @click="clearAllFilters"
+                    >
+                      <span class="personal-dashboard-detail__chip-label">All</span>
+                      <span class="personal-dashboard-detail__chip-count">{{ allCriterionCount }}</span>
+                    </CdxButton>
+                    <CdxButton
+                      v-for="code in visibleChipCodes"
+                      :key="code"
+                      class="personal-dashboard-detail__chip"
+                      :class="{
+                        'personal-dashboard-detail__chip--active': activeCriteria.includes(code),
+                        'personal-dashboard-detail__chip--empty': getCriterionCount(code) === 0,
+                      }"
+                      :aria-pressed="activeCriteria.includes(code)"
+                      weight="normal"
+                      @click="toggleCriterion(code)"
+                    >
+                      <span class="personal-dashboard-detail__chip-label">{{ code }}</span>
+                      <span
+                        v-if="getCriterionCount(code) > 0"
+                        class="personal-dashboard-detail__chip-count"
+                      >{{ getCriterionCount(code) }}</span>
+                    </CdxButton>
+                    <CdxButton
+                      class="personal-dashboard-detail__chip personal-dashboard-detail__chip--more"
+                      weight="normal"
+                      @click="openCriterionSheet"
+                    >
+                      <CdxIcon
+                        :icon="cdxIconFunnel"
+                        size="x-small"
+                      />
+                      <span class="personal-dashboard-detail__chip-label">Filters</span>
+                    </CdxButton>
+                  </div>
+
+                  <div
+                    v-if="hasAnyActiveFilter"
+                    class="personal-dashboard-detail__chip-clear-fade"
+                    aria-hidden="true"
+                  />
+                  <CdxButton
+                    v-if="hasAnyActiveFilter"
+                    class="personal-dashboard-detail__chip-clear"
+                    weight="quiet"
+                    aria-label="Clear all filters"
+                    @click="clearAllFilters"
+                  >
+                    <CdxIcon
+                      :icon="cdxIconClose"
+                      size="x-small"
+                    />
+                  </CdxButton>
+                </div>
+
+                <label class="personal-dashboard-detail__sort-menu-row">
+                  <span class="personal-dashboard-detail__sort-menu-label">Sort by</span>
                   <CdxSelect
-                    class="personal-dashboard-detail__sort-select"
+                    class="personal-dashboard-detail__sort-menu"
                     :menu-items="speedySortItems"
                     :selected="speedySortValue"
                     aria-label="Sort by"
                     @update:selected="speedySortValue = $event"
                   />
-                </div>
+                </label>
               </div>
 
               <div class="personal-dashboard-detail__requests">
-                <p
-                  v-if="showSpeedyContestedHeader"
-                  class="personal-dashboard-detail__group-heading"
+                <div
+                  v-if="showSpeedyCriterionEmptyState"
+                  class="personal-dashboard-detail__empty-state"
                 >
-                  Contested ({{ speedyContestedCount }})
-                </p>
-                <p
-                  v-if="showSpeedyStaleHeader"
-                  class="personal-dashboard-detail__group-heading"
-                >
-                  Over 6h target ({{ speedyStaleCount }})
-                </p>
+                  <p>No pages match your current filters.</p>
+                  <CdxButton
+                    size="small"
+                    @click="clearAllFilters"
+                  >
+                    Clear all filters
+                  </CdxButton>
+                </div>
 
-                <article
-                  v-for="request in sortedOptionBSpeedyDeletionRequests"
-                  :key="request.id"
-                  class="personal-dashboard-detail__request"
-                  :class="{ 'personal-dashboard-detail__request--v2': isAttentionCardTreatment }"
-                >
-                  <template v-if="isAttentionCardTreatment">
-                    <CdxInfoChip
-                      v-if="getSpeedyUrgencyKind(request)"
-                      class="personal-dashboard-detail__urgency-chip"
-                      :class="getSpeedyUrgencyChipClass(request)"
-                      :status="getSpeedyUrgencyStatus(request)"
-                      :icon="getSpeedyUrgencyIcon(request)"
-                    >
-                      {{ getSpeedyUrgencyLabel(request) }}
-                    </CdxInfoChip>
-                    <span class="personal-dashboard-detail__criterion-eyebrow">{{ request.criterion }}</span>
-                    <h2 class="personal-dashboard-detail__title-line">{{ request.title }}</h2>
-                    <p class="personal-dashboard-detail__importance">
-                      <span class="personal-dashboard-detail__importance-item">
-                        <CdxIcon :icon="cdxIconEye" size="small" />
-                        {{ request.visibility }}
-                      </span>
-                    </p>
-                    <p class="personal-dashboard-detail__tagger-reason">
-                      “{{ request.taggerReason }}”
-                    </p>
-                    <p
-                      class="personal-dashboard-detail__system-signal"
-                      :class="{ 'personal-dashboard-detail__system-signal--error': isSpeedyDeletionUrgent(request) }"
-                    >
-                      <strong>{{ request.signalLabel }}</strong>
-                      · {{ request.signalLine }}
-                    </p>
-                    <footer class="personal-dashboard-detail__action-footer">
-                      <CdxButton
-                        class="personal-dashboard-detail__delete-button"
-                        action="destructive"
-                        weight="primary"
-                        size="small"
-                        @click.stop="openDeleteForm(request)"
+                <template v-else>
+                  <p
+                    v-if="showPrototypeV2SpeedyCriterionFilter"
+                    class="personal-dashboard-detail__results-count"
+                  >
+                    Showing {{ sortedOptionBSpeedyDeletionRequests.length }}
+                    {{ sortedOptionBSpeedyDeletionRequests.length === 1 ? 'page' : 'pages' }}
+                  </p>
+                  <article
+                    v-for="request in sortedOptionBSpeedyDeletionRequests"
+                    :key="request.id"
+                    class="personal-dashboard-detail__request"
+                    :class="{ 'personal-dashboard-detail__request--v2': isAttentionCardTreatment }"
+                  >
+                    <template v-if="isAttentionCardTreatment">
+                      <CdxInfoChip
+                        v-if="getSpeedyUrgencyKind(request)"
+                        class="personal-dashboard-detail__urgency-chip"
+                        :class="getSpeedyUrgencyChipClass(request)"
+                        :status="getSpeedyUrgencyStatus(request)"
+                        :icon="getSpeedyUrgencyIcon(request)"
                       >
-                        Delete
-                      </CdxButton>
-                      <nav class="personal-dashboard-detail__action-links" aria-label="Speedy deletion destinations and actions">
-                        <a href="#" @click.prevent="openHistoryPage(request.title, 'speedy')">History</a>
-                        <a href="#" @click.prevent="openRequestPage(request.title, 'speedy')">Talk</a>
-                        <a
-                          class="personal-dashboard-detail__action-link--workflow"
-                          href="#"
-                          @click.prevent="openDeclinePage(request.title, 'speedy')"
-                        >
-                          Decline
-                        </a>
-                      </nav>
-                    </footer>
-                  </template>
+                        {{ getSpeedyUrgencyLabel(request) }}
+                      </CdxInfoChip>
+                      <span class="personal-dashboard-detail__criterion-eyebrow">{{ request.criterion }}</span>
+                      <h2 class="personal-dashboard-detail__title-line">
+                        {{ request.title }}
+                      </h2>
+                      <p class="personal-dashboard-detail__importance">
+                        <span class="personal-dashboard-detail__importance-item">
+                          <CdxIcon
+                            :icon="cdxIconEye"
+                            size="small"
+                          />
+                          {{ request.visibility }}
+                        </span>
+                      </p>
+                      <p class="personal-dashboard-detail__tagger-reason">
+                        “{{ request.taggerReason }}”
+                      </p>
+                      <p
+                        class="personal-dashboard-detail__system-signal"
+                        :class="{ 'personal-dashboard-detail__system-signal--error': isSpeedyDeletionUrgent(request) }"
+                      >
+                        <strong>{{ request.signalLabel }}</strong>
+                        · {{ request.signalLine }}
+                      </p>
+                      <footer
+                        class="personal-dashboard-detail__action-footer"
+                        :class="{ 'personal-dashboard-detail__action-footer--evidence': usesPrototypeV2EvidenceFooter }"
+                      >
+                        <template v-if="usesPrototypeV2EvidenceFooter">
+                          <div class="personal-dashboard-detail__primary-action-row">
+                            <CdxButton
+                              class="personal-dashboard-detail__evidence-button"
+                              action="progressive"
+                              weight="primary"
+                              size="small"
+                              @click.stop="openArticlePage(request.title, 'speedy')"
+                            >
+                              View page
+                            </CdxButton>
+                          </div>
+                          <nav
+                            class="personal-dashboard-detail__action-links"
+                            aria-label="Speedy deletion destinations and actions"
+                          >
+                            <a
+                              href="#"
+                              @click.prevent="openHistoryPage(request.title, 'speedy')"
+                            >History</a>
+                            <a
+                              href="#"
+                              @click.prevent="openRequestPage(request.title, 'speedy')"
+                            >Talk</a>
+                          </nav>
+                        </template>
+                        <template v-else>
+                          <CdxButton
+                            class="personal-dashboard-detail__delete-button"
+                            action="destructive"
+                            weight="primary"
+                            size="small"
+                            @click.stop="openDeleteForm(request)"
+                          >
+                            Delete
+                          </CdxButton>
+                          <nav
+                            class="personal-dashboard-detail__action-links"
+                            aria-label="Speedy deletion destinations and actions"
+                          >
+                            <a
+                              href="#"
+                              @click.prevent="openHistoryPage(request.title, 'speedy')"
+                            >History</a>
+                            <a
+                              href="#"
+                              @click.prevent="openRequestPage(request.title, 'speedy')"
+                            >Talk</a>
+                            <a
+                              class="personal-dashboard-detail__action-link--workflow"
+                              href="#"
+                              @click.prevent="openDeclinePage(request.title, 'speedy')"
+                            >
+                              Decline
+                            </a>
+                          </nav>
+                        </template>
+                      </footer>
+                    </template>
 
-                  <template v-else>
-                    <span class="personal-dashboard-detail__criterion">{{ request.criterion }}</span>
-                    <h2 class="personal-dashboard-detail__title-line">{{ request.title }}</h2>
-                    <p class="personal-dashboard-detail__importance">
-                      <span class="personal-dashboard-detail__importance-item">
-                        <CdxIcon :icon="cdxIconEye" size="small" />
-                        {{ request.visibility }}
-                      </span>
-                    </p>
-                    <p class="personal-dashboard-detail__request-summary">
-                      {{ request.requestSummary }}
-                    </p>
-                    <p class="personal-dashboard-detail__signal-label">
-                      {{ request.signalLabel }}
-                    </p>
-                    <p class="personal-dashboard-detail__signal-line">
-                      {{ request.signalLine }}
-                    </p>
-                    <p class="personal-dashboard-detail__status-line">
-                      {{ request.status }}
-                    </p>
-                  </template>
-                </article>
+                    <template v-else>
+                      <span class="personal-dashboard-detail__criterion">{{ request.criterion }}</span>
+                      <h2 class="personal-dashboard-detail__title-line">
+                        {{ request.title }}
+                      </h2>
+                      <p class="personal-dashboard-detail__importance">
+                        <span class="personal-dashboard-detail__importance-item">
+                          <CdxIcon
+                            :icon="cdxIconEye"
+                            size="small"
+                          />
+                          {{ request.visibility }}
+                        </span>
+                      </p>
+                      <p class="personal-dashboard-detail__request-summary">
+                        {{ request.requestSummary }}
+                      </p>
+                      <p class="personal-dashboard-detail__signal-label">
+                        {{ request.signalLabel }}
+                      </p>
+                      <p class="personal-dashboard-detail__signal-line">
+                        {{ request.signalLine }}
+                      </p>
+                      <p class="personal-dashboard-detail__status-line">
+                        {{ request.status }}
+                      </p>
+                    </template>
+                  </article>
+                </template>
               </div>
             </div>
           </section>
         </template>
 
         <template v-else>
-        <header class="personal-dashboard-baseline__hero">
-          <h1>Hello, {{ moderator.name }}!</h1>
-          <div class="personal-dashboard-baseline__survey">
-            <a href="#">Share feedback</a>
-            <span class="personal-dashboard-baseline__beta">
-              <CdxIcon :icon="cdxIconLabFlask" size="small" />
-              Beta
-            </span>
-          </div>
-        </header>
-
-        <template v-if="isOptionBVariant">
-          <a
-            class="personal-dashboard-card personal-dashboard-card--linked"
-            href="#"
-            aria-labelledby="option-b-protection-heading"
-            @click="openOptionBProtection"
-          >
-            <header class="personal-dashboard-card__header">
-              <h2 id="option-b-protection-heading">Pages for protection</h2>
-              <CdxIcon :icon="cdxIconNext" />
-            </header>
-            <ul
-              v-if="!isAttentionCardTreatment"
-              class="personal-dashboard-baseline__protection-metrics"
-              aria-label="Pages for protection details"
-            >
-              <li aria-label="17 unresolved protection requests">
-                <CdxIcon :icon="cdxIconSpeechBubble" />
-                <strong>17</strong>
-                <span>unresolved</span>
-              </li>
-              <li aria-label="6 protection requests have no admin reply">
-                <CdxIcon :icon="cdxIconHistory" />
-                <strong>6</strong>
-                <span>no admin reply</span>
-              </li>
-              <li aria-label="Longest unresolved protection request has waited 22 hours">
-                <CdxIcon :icon="cdxIconClock" />
-                <strong>22h</strong>
-                <span>longest wait</span>
-              </li>
-            </ul>
-            <ul
-              v-if="isAttentionCardTreatment && !activeProtectionAttentionSummary.needsAttention"
-              class="personal-dashboard-baseline__protection-metrics"
-              aria-label="Pages for protection calm details"
-            >
-              <li aria-label="17 unresolved protection requests">
-                <CdxIcon :icon="cdxIconSpeechBubble" />
-                <strong>17</strong>
-                <span>unresolved</span>
-              </li>
-              <li aria-label="6 protection requests have no admin reply">
-                <CdxIcon :icon="cdxIconHistory" />
-                <strong>6</strong>
-                <span>no admin reply</span>
-              </li>
-              <li aria-label="Longest unresolved protection request has waited 4 hours">
-                <CdxIcon :icon="cdxIconClock" />
-                <strong>4h</strong>
-                <span>longest wait</span>
-              </li>
-            </ul>
-            <div
-              v-if="isAttentionCardTreatment && activeProtectionAttentionSummary.needsAttention"
-              class="personal-dashboard-card__attention"
-              aria-label="Pages for protection attention summary"
-            >
-              <p
-                class="personal-dashboard-card__attention-lead"
-                :class="{ 'personal-dashboard-card__attention-lead--warning': activeProtectionAttentionSummary.needsAttention }"
-              >
+          <header class="personal-dashboard-baseline__hero">
+            <h1>Hello, {{ moderator.name }}!</h1>
+            <div class="personal-dashboard-baseline__survey">
+              <a href="#">Share feedback</a>
+              <span class="personal-dashboard-baseline__beta">
                 <CdxIcon
-                  v-if="activeProtectionAttentionSummary.needsAttention"
-                  :icon="cdxIconAlert"
+                  :icon="cdxIconLabFlask"
                   size="small"
                 />
-                <span>
-                  <strong>{{ activeProtectionAttentionSummary.leadValue }}</strong>
-                  {{ activeProtectionAttentionSummary.leadLabel }}
-                </span>
-              </p>
-              <p class="personal-dashboard-card__attention-secondary">
-                {{ activeProtectionAttentionSummary.secondary }}
-              </p>
-              <span
-                v-if="activeProtectionAttentionSummary.actionLabel"
-                class="personal-dashboard-card__attention-action"
-              >
-                {{ activeProtectionAttentionSummary.actionLabel }}
+                Beta
               </span>
             </div>
-            <p v-if="isEvidenceCardTreatment" class="personal-dashboard-card__evidence">
-              <strong>Why it matters</strong>
-              <span>6 requests have no admin reply; the oldest has waited 22h.</span>
-            </p>
-          </a>
+          </header>
 
-          <a
-            class="personal-dashboard-card personal-dashboard-card--linked"
-            href="#"
-            aria-labelledby="option-b-speedy-heading"
-            @click="openOptionBSpeedy"
-          >
-            <header class="personal-dashboard-card__header">
-              <h2 id="option-b-speedy-heading">Pages for speedy deletion</h2>
-              <CdxIcon :icon="cdxIconNext" />
-            </header>
-            <ul
-              v-if="!isAttentionCardTreatment"
-              class="personal-dashboard-baseline__protection-metrics"
-              aria-label="Pages for speedy deletion details"
+          <template v-if="isOptionBVariant">
+            <a
+              class="personal-dashboard-card personal-dashboard-card--linked"
+              href="#"
+              aria-labelledby="option-b-protection-heading"
+              @click="openOptionBProtection"
             >
-              <li aria-label="4 speedy deletion pages are in the queue">
-                <CdxIcon :icon="cdxIconTrash" />
-                <strong>4</strong>
-                <span>in queue</span>
-              </li>
-              <li aria-label="2 speedy deletion pages are contested">
-                <CdxIcon :icon="cdxIconSpeechBubbles" />
-                <strong>2</strong>
-                <span>contested</span>
-              </li>
-              <li aria-label="Longest speedy deletion page has waited 3 hours">
-                <CdxIcon :icon="cdxIconClock" />
-                <strong>3h</strong>
-                <span>longest wait</span>
-              </li>
-            </ul>
-            <ul
-              v-if="isAttentionCardTreatment && !activeSpeedyAttentionSummary.needsAttention"
-              class="personal-dashboard-baseline__protection-metrics"
-              aria-label="Pages for speedy deletion calm details"
-            >
-              <li aria-label="4 speedy deletion pages are in the queue">
-                <CdxIcon :icon="cdxIconTrash" />
-                <strong>4</strong>
-                <span>in queue</span>
-              </li>
-              <li aria-label="0 speedy deletion pages are contested">
-                <CdxIcon :icon="cdxIconSpeechBubbles" />
-                <strong>0</strong>
-                <span>contested</span>
-              </li>
-              <li aria-label="Longest speedy deletion page has waited 3 hours">
-                <CdxIcon :icon="cdxIconClock" />
-                <strong>3h</strong>
-                <span>longest wait</span>
-              </li>
-            </ul>
-            <div
-              v-if="isAttentionCardTreatment && activeSpeedyAttentionSummary.needsAttention"
-              class="personal-dashboard-card__attention"
-              aria-label="Pages for speedy deletion attention summary"
-            >
+              <header class="personal-dashboard-card__header">
+                <h2 id="option-b-protection-heading">Pages for protection</h2>
+                <CdxIcon :icon="cdxIconNext" />
+              </header>
+              <ul
+                v-if="!isAttentionCardTreatment"
+                class="personal-dashboard-baseline__protection-metrics"
+                aria-label="Pages for protection details"
+              >
+                <li aria-label="17 unresolved protection requests">
+                  <CdxIcon :icon="cdxIconSpeechBubble" />
+                  <strong>17</strong>
+                  <span>unresolved</span>
+                </li>
+                <li aria-label="6 protection requests have no admin reply">
+                  <CdxIcon :icon="cdxIconHistory" />
+                  <strong>6</strong>
+                  <span>no admin reply</span>
+                </li>
+                <li aria-label="Longest unresolved protection request has waited 22 hours">
+                  <CdxIcon :icon="cdxIconClock" />
+                  <strong>22h</strong>
+                  <span>longest wait</span>
+                </li>
+              </ul>
+              <ul
+                v-if="isAttentionCardTreatment && !activeProtectionAttentionSummary.needsAttention"
+                class="personal-dashboard-baseline__protection-metrics"
+                aria-label="Pages for protection calm details"
+              >
+                <li aria-label="17 unresolved protection requests">
+                  <CdxIcon :icon="cdxIconSpeechBubble" />
+                  <strong>17</strong>
+                  <span>unresolved</span>
+                </li>
+                <li aria-label="6 protection requests have no admin reply">
+                  <CdxIcon :icon="cdxIconHistory" />
+                  <strong>6</strong>
+                  <span>no admin reply</span>
+                </li>
+                <li aria-label="Longest unresolved protection request has waited 4 hours">
+                  <CdxIcon :icon="cdxIconClock" />
+                  <strong>4h</strong>
+                  <span>longest wait</span>
+                </li>
+              </ul>
+              <div
+                v-if="isAttentionCardTreatment && activeProtectionAttentionSummary.needsAttention"
+                class="personal-dashboard-card__attention"
+                aria-label="Pages for protection attention summary"
+              >
+                <p
+                  class="personal-dashboard-card__attention-lead"
+                  :class="{
+                    'personal-dashboard-card__attention-lead--warning': isProtectionHomeAlarm,
+                    'personal-dashboard-card__attention-lead--neutral': isProtectionHomeNeutralTimeSignal,
+                  }"
+                >
+                  <CdxIcon
+                    v-if="isProtectionHomeAlarm"
+                    :icon="cdxIconAlert"
+                    size="small"
+                  />
+                  <span>
+                    <strong>{{ activeProtectionAttentionSummary.leadValue }}</strong>
+                    {{ activeProtectionAttentionSummary.leadLabel }}
+                  </span>
+                </p>
+                <p class="personal-dashboard-card__attention-secondary">
+                  {{ activeProtectionAttentionSummary.secondary }}
+                </p>
+                <span
+                  v-if="activeProtectionAttentionSummary.actionLabel"
+                  class="personal-dashboard-card__attention-action"
+                >
+                  {{ activeProtectionAttentionSummary.actionLabel }}
+                </span>
+              </div>
               <p
-                class="personal-dashboard-card__attention-lead"
-                :class="{ 'personal-dashboard-card__attention-lead--warning': activeSpeedyAttentionSummary.needsAttention }"
+                v-if="isEvidenceCardTreatment"
+                class="personal-dashboard-card__evidence"
               >
-                <CdxIcon
-                  v-if="activeSpeedyAttentionSummary.needsAttention"
-                  :icon="cdxIconAlert"
-                  size="small"
-                />
-                <span>
-                  <strong>{{ activeSpeedyAttentionSummary.leadValue }}</strong>
-                  {{ activeSpeedyAttentionSummary.leadLabel }}
+                <strong>Why it matters</strong>
+                <span>6 requests have no admin reply; the oldest has waited 22h.</span>
+              </p>
+            </a>
+
+            <a
+              class="personal-dashboard-card personal-dashboard-card--linked"
+              href="#"
+              aria-labelledby="option-b-speedy-heading"
+              @click="openOptionBSpeedy"
+            >
+              <header class="personal-dashboard-card__header">
+                <h2 id="option-b-speedy-heading">Pages for speedy deletion</h2>
+                <CdxIcon :icon="cdxIconNext" />
+              </header>
+              <ul
+                v-if="!isAttentionCardTreatment"
+                class="personal-dashboard-baseline__protection-metrics"
+                aria-label="Pages for speedy deletion details"
+              >
+                <li aria-label="4 speedy deletion pages are in the queue">
+                  <CdxIcon :icon="cdxIconTrash" />
+                  <strong>4</strong>
+                  <span>in queue</span>
+                </li>
+                <li aria-label="2 speedy deletion pages are contested">
+                  <CdxIcon :icon="cdxIconSpeechBubbles" />
+                  <strong>2</strong>
+                  <span>contested</span>
+                </li>
+                <li aria-label="Longest speedy deletion page has waited 3 hours">
+                  <CdxIcon :icon="cdxIconClock" />
+                  <strong>3h</strong>
+                  <span>longest wait</span>
+                </li>
+              </ul>
+              <ul
+                v-if="isAttentionCardTreatment && !activeSpeedyAttentionSummary.needsAttention"
+                class="personal-dashboard-baseline__protection-metrics"
+                aria-label="Pages for speedy deletion calm details"
+              >
+                <li aria-label="4 speedy deletion pages are in the queue">
+                  <CdxIcon :icon="cdxIconTrash" />
+                  <strong>4</strong>
+                  <span>in queue</span>
+                </li>
+                <li aria-label="0 speedy deletion pages are contested">
+                  <CdxIcon :icon="cdxIconSpeechBubbles" />
+                  <strong>0</strong>
+                  <span>contested</span>
+                </li>
+                <li aria-label="Longest speedy deletion page has waited 3 hours">
+                  <CdxIcon :icon="cdxIconClock" />
+                  <strong>3h</strong>
+                  <span>longest wait</span>
+                </li>
+              </ul>
+              <div
+                v-if="isAttentionCardTreatment && activeSpeedyAttentionSummary.needsAttention"
+                class="personal-dashboard-card__attention"
+                aria-label="Pages for speedy deletion attention summary"
+              >
+                <p
+                  class="personal-dashboard-card__attention-lead"
+                  :class="{
+                    'personal-dashboard-card__attention-lead--warning': isSpeedyHomeAlarm,
+                    'personal-dashboard-card__attention-lead--neutral': isSpeedyHomeNeutralTimeSignal,
+                  }"
+                >
+                  <CdxIcon
+                    v-if="isSpeedyHomeAlarm"
+                    :icon="cdxIconAlert"
+                    size="small"
+                  />
+                  <span>
+                    <strong>{{ activeSpeedyAttentionSummary.leadValue }}</strong>
+                    {{ activeSpeedyAttentionSummary.leadLabel }}
+                  </span>
+                </p>
+                <p class="personal-dashboard-card__attention-secondary">
+                  {{ activeSpeedyAttentionSummary.secondary }}
+                </p>
+                <span
+                  v-if="activeSpeedyAttentionSummary.actionLabel"
+                  class="personal-dashboard-card__attention-action"
+                >
+                  {{ activeSpeedyAttentionSummary.actionLabel }}
                 </span>
-              </p>
-              <p class="personal-dashboard-card__attention-secondary">
-                {{ activeSpeedyAttentionSummary.secondary }}
-              </p>
-              <span
-                v-if="activeSpeedyAttentionSummary.actionLabel"
-                class="personal-dashboard-card__attention-action"
+              </div>
+              <p
+                v-if="isEvidenceCardTreatment"
+                class="personal-dashboard-card__evidence"
               >
-                {{ activeSpeedyAttentionSummary.actionLabel }}
-              </span>
+                <strong>Why it matters</strong>
+                <span>2 pages need an admin decision before the queue can clear.</span>
+              </p>
+            </a>
+          </template>
+
+          <section
+            v-if="!isOptionBVariant"
+            class="personal-dashboard-card"
+            aria-labelledby="baseline-review-heading"
+          >
+            <a
+              class="personal-dashboard-card__header"
+              href="#"
+            >
+              <h2 id="baseline-review-heading">Review changes</h2>
+              <CdxIcon :icon="cdxIconNext" />
+            </a>
+            <div class="personal-dashboard-baseline__review-summary">
+              <CdxIcon :icon="cdxIconEdit" />
+              <p>NewContributor edited the Page protection demo May 5 article</p>
             </div>
-            <p v-if="isEvidenceCardTreatment" class="personal-dashboard-card__evidence">
-              <strong>Why it matters</strong>
-              <span>2 pages need an admin decision before the queue can clear.</span>
-            </p>
-          </a>
-        </template>
-
-        <section v-if="!isOptionBVariant" class="personal-dashboard-card" aria-labelledby="baseline-review-heading">
-          <a class="personal-dashboard-card__header" href="#">
-            <h2 id="baseline-review-heading">Review changes</h2>
-            <CdxIcon :icon="cdxIconNext" />
-          </a>
-          <div class="personal-dashboard-baseline__review-summary">
-            <CdxIcon :icon="cdxIconEdit" />
-            <p>NewContributor edited the Page protection demo May 5 article</p>
-          </div>
-          <CdxButton action="progressive" weight="primary" class="personal-dashboard-baseline__full-button">
-            View more edits
-          </CdxButton>
-        </section>
-
-        <section v-if="!isOptionBVariant && !isOptionAVariant" class="personal-dashboard-card" aria-labelledby="baseline-impact-heading">
-          <h2 id="baseline-impact-heading">Your impact</h2>
-          <div class="personal-dashboard-baseline__impact">
-            <div>
-              <CdxIcon :icon="cdxIconSpeechBubble" />
-              <strong>0</strong>
-              <span>Thanks sent</span>
-            </div>
-            <div>
-              <CdxIcon :icon="cdxIconCheck" />
-              <strong>0</strong>
-              <span>Edits reviewed</span>
-              <CdxIcon :icon="cdxIconInfo" size="small" />
-            </div>
-          </div>
-        </section>
-
-        <section v-if="!isOptionBVariant" class="personal-dashboard-card" aria-labelledby="baseline-protection-heading">
-          <a class="personal-dashboard-card__header" href="#" @click="openOptionAProtectionRequests">
-            <h2 id="baseline-protection-heading">Protection requests</h2>
-            <CdxIcon :icon="cdxIconNext" />
-          </a>
-
-          <template v-if="isOptionAVariant">
-            <ul class="personal-dashboard-baseline__protection-metrics" aria-label="Protection request summary">
-              <li aria-label="17 open protection requests">
-                <CdxIcon :icon="cdxIconSpeechBubble" />
-                <strong>17</strong>
-                <span>open</span>
-              </li>
-              <li aria-label="6 unanswered protection requests">
-                <CdxIcon :icon="cdxIconClock" />
-                <strong>6</strong>
-                <span>unanswered</span>
-              </li>
-              <li aria-label="Oldest open protection request has waited 22 hours">
-                <CdxIcon :icon="cdxIconClock" />
-                <strong>22h</strong>
-                <span>oldest open</span>
-              </li>
-              <li aria-label="57 new protection requests in the last 24 hours">
-                <CdxIcon :icon="cdxIconRecentChanges" />
-                <strong>57</strong>
-                <span>received today</span>
-              </li>
-            </ul>
-
             <CdxButton
               action="progressive"
               weight="primary"
               class="personal-dashboard-baseline__full-button"
+            >
+              View more edits
+            </CdxButton>
+          </section>
+
+          <section
+            v-if="!isOptionBVariant && !isOptionAVariant"
+            class="personal-dashboard-card"
+            aria-labelledby="baseline-impact-heading"
+          >
+            <h2 id="baseline-impact-heading">
+              Your impact
+            </h2>
+            <div class="personal-dashboard-baseline__impact">
+              <div>
+                <CdxIcon :icon="cdxIconSpeechBubble" />
+                <strong>0</strong>
+                <span>Thanks sent</span>
+              </div>
+              <div>
+                <CdxIcon :icon="cdxIconCheck" />
+                <strong>0</strong>
+                <span>Edits reviewed</span>
+                <CdxIcon
+                  :icon="cdxIconInfo"
+                  size="small"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section
+            v-if="!isOptionBVariant"
+            class="personal-dashboard-card"
+            aria-labelledby="baseline-protection-heading"
+          >
+            <a
+              class="personal-dashboard-card__header"
+              href="#"
               @click="openOptionAProtectionRequests"
             >
-              View requests
-            </CdxButton>
-          </template>
+              <h2 id="baseline-protection-heading">Protection requests</h2>
+              <CdxIcon :icon="cdxIconNext" />
+            </a>
 
-          <template v-else>
-            <div class="personal-dashboard-baseline__protection-request">
-              <CdxIcon :icon="cdxIconSpeechBubble" />
-              <span>Semi-protection request: Page prot...</span>
-            </div>
-            <CdxButton action="progressive" weight="primary" class="personal-dashboard-baseline__full-button">
-              View more
-            </CdxButton>
-          </template>
-        </section>
+            <template v-if="isOptionAVariant">
+              <ul
+                class="personal-dashboard-baseline__protection-metrics"
+                aria-label="Protection request summary"
+              >
+                <li aria-label="17 open protection requests">
+                  <CdxIcon :icon="cdxIconSpeechBubble" />
+                  <strong>17</strong>
+                  <span>open</span>
+                </li>
+                <li aria-label="6 unanswered protection requests">
+                  <CdxIcon :icon="cdxIconClock" />
+                  <strong>6</strong>
+                  <span>unanswered</span>
+                </li>
+                <li aria-label="Oldest open protection request has waited 22 hours">
+                  <CdxIcon :icon="cdxIconClock" />
+                  <strong>22h</strong>
+                  <span>oldest open</span>
+                </li>
+                <li aria-label="57 new protection requests in the last 24 hours">
+                  <CdxIcon :icon="cdxIconRecentChanges" />
+                  <strong>57</strong>
+                  <span>received today</span>
+                </li>
+              </ul>
 
-        <section
-          v-if="isOptionAVariant"
-          class="personal-dashboard-card"
-          aria-labelledby="option-a-speedy-heading"
-        >
-          <a class="personal-dashboard-card__header" href="#">
-            <h2 id="option-a-speedy-heading">Speedy deletion</h2>
-            <CdxIcon :icon="cdxIconNext" />
-          </a>
+              <CdxButton
+                action="progressive"
+                weight="primary"
+                class="personal-dashboard-baseline__full-button"
+                @click="openOptionAProtectionRequests"
+              >
+                View requests
+              </CdxButton>
+            </template>
 
-          <ul class="personal-dashboard-baseline__protection-metrics" aria-label="Speedy deletion summary">
-            <li aria-label="4 pages tagged for speedy deletion">
-              <CdxIcon :icon="cdxIconTrash" />
-              <strong>4</strong>
-              <span>tagged</span>
-            </li>
+            <template v-else>
+              <div class="personal-dashboard-baseline__protection-request">
+                <CdxIcon :icon="cdxIconSpeechBubble" />
+                <span>Semi-protection request: Page prot...</span>
+              </div>
+              <CdxButton
+                action="progressive"
+                weight="primary"
+                class="personal-dashboard-baseline__full-button"
+              >
+                View more
+              </CdxButton>
+            </template>
+          </section>
+
+          <section
+            v-if="isOptionAVariant"
+            class="personal-dashboard-card"
+            aria-labelledby="option-a-speedy-heading"
+          >
+            <a
+              class="personal-dashboard-card__header"
+              href="#"
+            >
+              <h2 id="option-a-speedy-heading">Speedy deletion</h2>
+              <CdxIcon :icon="cdxIconNext" />
+            </a>
+
+            <ul
+              class="personal-dashboard-baseline__protection-metrics"
+              aria-label="Speedy deletion summary"
+            >
+              <li aria-label="4 pages tagged for speedy deletion">
+                <CdxIcon :icon="cdxIconTrash" />
+                <strong>4</strong>
+                <span>tagged</span>
+              </li>
               <li aria-label="2 speedy deletion nominations awaiting administrator check">
                 <CdxIcon :icon="cdxIconClock" />
                 <strong>2</strong>
@@ -1620,37 +2428,56 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                 <strong>27</strong>
                 <span>tagged today</span>
               </li>
-          </ul>
+            </ul>
 
-          <CdxButton action="progressive" weight="primary" class="personal-dashboard-baseline__full-button">
-            View pages
-          </CdxButton>
-        </section>
+            <CdxButton
+              action="progressive"
+              weight="primary"
+              class="personal-dashboard-baseline__full-button"
+            >
+              View pages
+            </CdxButton>
+          </section>
 
-        <section class="personal-dashboard-card" aria-labelledby="baseline-policies-heading">
-          <a class="personal-dashboard-card__header" href="#">
-            <h2 id="baseline-policies-heading">Policies and guidelines</h2>
-            <CdxIcon :icon="cdxIconNext" />
-          </a>
-          <p>Review best practices to create a free and reliable encyclopedia.</p>
-        </section>
+          <section
+            class="personal-dashboard-card"
+            aria-labelledby="baseline-policies-heading"
+          >
+            <a
+              class="personal-dashboard-card__header"
+              href="#"
+            >
+              <h2 id="baseline-policies-heading">Policies and guidelines</h2>
+              <CdxIcon :icon="cdxIconNext" />
+            </a>
+            <p>Review best practices to create a free and reliable encyclopedia.</p>
+          </section>
 
-        <section v-if="isOptionAVariant" class="personal-dashboard-card" aria-labelledby="option-a-impact-heading">
-          <h2 id="option-a-impact-heading">Your impact</h2>
-          <div class="personal-dashboard-baseline__impact">
-            <div>
-              <CdxIcon :icon="cdxIconSpeechBubble" />
-              <strong>0</strong>
-              <span>Thanks sent</span>
+          <section
+            v-if="isOptionAVariant"
+            class="personal-dashboard-card"
+            aria-labelledby="option-a-impact-heading"
+          >
+            <h2 id="option-a-impact-heading">
+              Your impact
+            </h2>
+            <div class="personal-dashboard-baseline__impact">
+              <div>
+                <CdxIcon :icon="cdxIconSpeechBubble" />
+                <strong>0</strong>
+                <span>Thanks sent</span>
+              </div>
+              <div>
+                <CdxIcon :icon="cdxIconCheck" />
+                <strong>0</strong>
+                <span>Edits reviewed</span>
+                <CdxIcon
+                  :icon="cdxIconInfo"
+                  size="small"
+                />
+              </div>
             </div>
-            <div>
-              <CdxIcon :icon="cdxIconCheck" />
-              <strong>0</strong>
-              <span>Edits reviewed</span>
-              <CdxIcon :icon="cdxIconInfo" size="small" />
-            </div>
-          </div>
-        </section>
+          </section>
         </template>
       </template>
 
@@ -1662,7 +2489,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           </p>
         </header>
 
-        <section class="moderator-dashboard__summary" aria-label="Moderation overview">
+        <section
+          class="moderator-dashboard__summary"
+          aria-label="Moderation overview"
+        >
           <article
             v-for="summary in summaryItems"
             :key="summary.label"
@@ -1677,13 +2507,21 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           </article>
         </section>
 
-        <section class="moderator-dashboard__section" aria-labelledby="judgment-heading">
+        <section
+          class="moderator-dashboard__section"
+          aria-labelledby="judgment-heading"
+        >
           <div class="moderator-dashboard__section-heading">
             <div>
-              <h2 id="judgment-heading">{{ activeVariant.heading }}</h2>
+              <h2 id="judgment-heading">
+                {{ activeVariant.heading }}
+              </h2>
               <p>{{ activeVariant.description }}</p>
             </div>
-            <CdxButton aria-label="Filter recommendations" weight="quiet">
+            <CdxButton
+              aria-label="Filter recommendations"
+              weight="quiet"
+            >
               <CdxIcon :icon="cdxIconFunnel" />
             </CdxButton>
           </div>
@@ -1712,14 +2550,19 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           </div>
         </section>
 
-        <section class="moderator-dashboard__detail" aria-labelledby="task-detail-heading">
+        <section
+          class="moderator-dashboard__detail"
+          aria-labelledby="task-detail-heading"
+        >
           <div class="moderator-dashboard__detail-header">
             <span class="moderator-dashboard__task-icon">
               <CdxIcon :icon="taskIcon(selectedTask)" />
             </span>
             <div>
               <p>{{ selectedTask.source }}</p>
-              <h2 id="task-detail-heading">{{ selectedTask.title }}</h2>
+              <h2 id="task-detail-heading">
+                {{ selectedTask.title }}
+              </h2>
             </div>
           </div>
 
@@ -1741,15 +2584,24 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           <div class="moderator-dashboard__signals">
             <h3>Why this is shown</h3>
             <ul>
-              <li v-for="signal in selectedTask.signals" :key="signal">
-                <CdxIcon :icon="cdxIconCheck" size="small" />
+              <li
+                v-for="signal in selectedTask.signals"
+                :key="signal"
+              >
+                <CdxIcon
+                  :icon="cdxIconCheck"
+                  size="small"
+                />
                 <span>{{ signal }}</span>
               </li>
             </ul>
           </div>
 
           <div class="moderator-dashboard__actions">
-            <CdxButton action="progressive" weight="primary">
+            <CdxButton
+              action="progressive"
+              weight="primary"
+            >
               {{ selectedTask.nextSurface }}
               <CdxIcon :icon="cdxIconNext" />
             </CdxButton>
@@ -1760,8 +2612,13 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           </div>
         </section>
 
-        <section class="moderator-dashboard__section" aria-labelledby="backlogs-heading">
-          <h2 id="backlogs-heading">Backlogs represented</h2>
+        <section
+          class="moderator-dashboard__section"
+          aria-labelledby="backlogs-heading"
+        >
+          <h2 id="backlogs-heading">
+            Backlogs represented
+          </h2>
           <div class="moderator-dashboard__backlogs">
             <article>
               <CdxIcon :icon="cdxIconSpeechBubble" />
@@ -1788,6 +2645,87 @@ function variantOptionLabel(variantId: DashboardVariantId) {
         </section>
       </template>
 
+      <div class="personal-dashboard-detail__criterion-dialog-host">
+        <CdxDialog
+          v-model:open="criterionSheetOpen"
+          class="personal-dashboard-detail__criterion-dialog"
+          title="Filters"
+          use-close-button
+          :fixed-height="false"
+          render-in-place
+        >
+          <div class="personal-dashboard-detail__filter-search">
+            <CdxSearchInput
+              v-model="modalSearchQuery"
+              aria-label="Search criteria"
+              placeholder="Search criteria (e.g. G11, spam)"
+            />
+          </div>
+
+          <section
+            v-for="group in filteredCriteriaByNamespace"
+            :key="group.namespace"
+            class="personal-dashboard-detail__filter-section"
+          >
+            <h3 class="personal-dashboard-detail__filter-section-heading">
+              {{ group.label }}
+            </h3>
+            <ul
+              class="personal-dashboard-detail__filter-list"
+              role="list"
+            >
+              <li
+                v-for="criterion in group.criteria"
+                :key="criterion.code"
+                class="personal-dashboard-detail__filter-row"
+              >
+                <CdxCheckbox
+                  :model-value="activeCriteria.includes(criterion.code)"
+                  class="personal-dashboard-detail__filter-checkbox"
+                  @update:model-value="toggleCriterion(criterion.code)"
+                >
+                  <span class="personal-dashboard-detail__filter-checkbox-label">
+                    <strong>{{ criterion.code }}</strong>
+                    · {{ criterion.name }}
+                  </span>
+                </CdxCheckbox>
+                <span
+                  v-if="getCriterionCount(criterion.code) > 0"
+                  class="personal-dashboard-detail__filter-row-count"
+                >{{ getCriterionCount(criterion.code) }}</span>
+              </li>
+            </ul>
+          </section>
+
+          <p
+            v-if="modalSearchQuery && filteredCriteriaByNamespace.length === 0"
+            class="personal-dashboard-detail__filter-empty"
+          >
+            No criteria matching "{{ modalSearchQuery }}".
+          </p>
+
+          <template #footer>
+            <div class="personal-dashboard-detail__filter-footer">
+              <CdxButton
+                weight="quiet"
+                :disabled="!hasAnyActiveFilter"
+                @click="clearAllFilters"
+              >
+                Clear all
+              </CdxButton>
+              <CdxButton
+                action="progressive"
+                weight="primary"
+                @click="criterionSheetOpen = false"
+              >
+                Show {{ sortedOptionBSpeedyDeletionRequests.length }}
+                {{ sortedOptionBSpeedyDeletionRequests.length === 1 ? 'result' : 'results' }}
+              </CdxButton>
+            </div>
+          </template>
+        </CdxDialog>
+      </div>
+
       <aside
         class="moderator-dashboard__variant-switcher"
         aria-label="Prototype variant switcher"
@@ -1807,78 +2745,114 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           aria-label="Prototype variants"
         >
           <div class="moderator-dashboard__variant-panel-header">
-            <strong>Variants</strong>
-            <CdxButton aria-label="Close prototype variants" weight="quiet" @click="variantSwitcherOpen = false">
+            <strong>Prototype settings</strong>
+            <CdxButton
+              aria-label="Close prototype variants"
+              weight="quiet"
+              @click="variantSwitcherOpen = false"
+            >
               <CdxIcon :icon="cdxIconClose" />
             </CdxButton>
           </div>
 
-          <button
-            v-for="variant in variants.filter((v) => v.id !== 'option-a')"
-            :key="variant.id"
-            class="moderator-dashboard__variant-option"
-            :class="{ 'moderator-dashboard__variant-option--active': variant.id === activeVariant.id }"
-            type="button"
-            @click="selectVariant(variant.id)"
+          <section
+            class="moderator-dashboard__variant-section"
+            aria-labelledby="moderator-dashboard-variants-heading"
           >
-            <span>{{ variantOptionLabel(variant.id) }}</span>
-          </button>
-
-          <div
-            v-if="isLatestPrototypeVariant"
-            class="moderator-dashboard__variant-group"
-            aria-label="Home cards"
-          >
-            <span class="moderator-dashboard__variant-group-label">Home cards</span>
-            <button
-              v-for="treatment in visibleCardTreatments"
-              :key="treatment.id"
-              class="moderator-dashboard__variant-option"
-              :class="{ 'moderator-dashboard__variant-option--active': treatment.id === activeCardTreatment.id }"
-              type="button"
-              :aria-pressed="treatment.id === activeCardTreatment.id"
-              @click="selectCardTreatment(treatment.id)"
+            <h2
+              id="moderator-dashboard-variants-heading"
+              class="moderator-dashboard__variant-section-label"
             >
-              <span>{{ treatment.label }}</span>
+              Version
+            </h2>
+            <button
+              v-for="variant in displayedVariants"
+              :key="variant.id"
+              class="moderator-dashboard__variant-option"
+              :class="{ 'moderator-dashboard__variant-option--active': variant.id === activeVariant.id }"
+              type="button"
+              @click="selectVariant(variant.id)"
+            >
+              <span>{{ variantOptionLabel(variant.id) }}</span>
             </button>
-          </div>
+          </section>
+
+          <fieldset
+            v-if="isCardDirectionVariant"
+            class="moderator-dashboard__variant-section moderator-dashboard__variant-fieldset"
+          >
+            <legend class="moderator-dashboard__variant-section-label">
+              Card style
+            </legend>
+            <div
+              class="moderator-dashboard__variant-radio-group"
+              role="radiogroup"
+              aria-label="Card style"
+            >
+              <CdxRadio
+                v-for="treatment in visibleCardTreatments"
+                :key="treatment.id"
+                v-model="selectedCardTreatmentId"
+                name="moderator-dashboard-card-style"
+                :input-value="treatment.id"
+              >
+                {{ treatment.label }}
+              </CdxRadio>
+            </div>
+          </fieldset>
+
+          <fieldset
+            v-if="isAttentionCardTreatment"
+            class="moderator-dashboard__variant-section moderator-dashboard__variant-fieldset"
+          >
+            <legend class="moderator-dashboard__variant-section-label">
+              Attention scenario
+            </legend>
+
+            <div class="moderator-dashboard__variant-subgroup">
+              <span class="moderator-dashboard__variant-subgroup-label">Protection queue</span>
+              <div
+                class="moderator-dashboard__variant-radio-group"
+                role="radiogroup"
+                aria-label="Protection queue state"
+              >
+                <CdxRadio
+                  v-for="state in protectionStateOptions"
+                  :key="state.id"
+                  v-model="selectedProtectionState"
+                  name="moderator-dashboard-protection-state"
+                  :input-value="state.id"
+                >
+                  {{ state.label }}
+                </CdxRadio>
+              </div>
+            </div>
+
+            <div class="moderator-dashboard__variant-subgroup">
+              <span class="moderator-dashboard__variant-subgroup-label">Speedy deletion queue</span>
+              <div
+                class="moderator-dashboard__variant-radio-group"
+                role="radiogroup"
+                aria-label="Speedy deletion queue state"
+              >
+                <CdxRadio
+                  v-for="state in speedyStateOptions"
+                  :key="state.id"
+                  v-model="selectedSpeedyState"
+                  name="moderator-dashboard-speedy-state"
+                  :input-value="state.id"
+                >
+                  {{ state.label }}
+                </CdxRadio>
+              </div>
+            </div>
+          </fieldset>
 
           <div
-            v-if="isAttentionCardTreatment"
-            class="moderator-dashboard__variant-group"
-            aria-label="Card states preview"
+            v-if="!isCardDirectionVariant"
+            class="moderator-dashboard__variant-help"
           >
-            <span class="moderator-dashboard__variant-group-label">Card states (preview)</span>
-
-            <div class="moderator-dashboard__variant-subgroup">
-              <span class="moderator-dashboard__variant-subgroup-label">Protection</span>
-              <button
-                v-for="state in protectionStateOptions"
-                :key="state.id"
-                class="moderator-dashboard__variant-option"
-                :class="{ 'moderator-dashboard__variant-option--active': state.id === activeProtectionState }"
-                type="button"
-                :aria-pressed="state.id === activeProtectionState"
-                @click="selectProtectionState(state.id)"
-              >
-                <span>{{ state.label }}</span>
-              </button>
-            </div>
-
-            <div class="moderator-dashboard__variant-subgroup">
-              <span class="moderator-dashboard__variant-subgroup-label">Speedy deletion</span>
-              <button
-                v-for="state in speedyStateOptions"
-                :key="state.id"
-                class="moderator-dashboard__variant-option"
-                :class="{ 'moderator-dashboard__variant-option--active': state.id === activeSpeedyState }"
-                type="button"
-                :aria-pressed="state.id === activeSpeedyState"
-                @click="selectSpeedyState(state.id)"
-              >
-                <span>{{ state.label }}</span>
-              </button>
-            </div>
+            Card style controls are available on Prototype v1 and Prototype v2.
           </div>
         </div>
 
@@ -1892,7 +2866,6 @@ function variantOptionLabel(variantId: DashboardVariantId) {
           <CdxIcon :icon="cdxIconSettings" />
         </CdxButton>
       </aside>
-
     </div>
   </ChromeWrapper>
 </template>
@@ -2206,6 +3179,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   color: var(--color-error);
 }
 
+.personal-dashboard-card__attention .personal-dashboard-card__attention-lead--neutral {
+  color: var(--color-subtle);
+}
+
 .personal-dashboard-card__attention-lead :deep(.cdx-icon) {
   flex: none;
   width: 1rem;
@@ -2449,8 +3426,164 @@ function variantOptionLabel(variantId: DashboardVariantId) {
 .personal-dashboard-detail__body {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-50, 8px);
+  gap: var(--spacing-75, 12px);
   padding: var(--spacing-100, 16px);
+}
+
+.personal-dashboard-detail__list-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-50, 8px);
+  margin: 0 calc(var(--spacing-100, 16px) * -1);
+  padding: 0 var(--spacing-100, 16px) var(--spacing-75, 12px);
+  border-bottom: 1px solid var(--border-color-subtle);
+}
+
+.personal-dashboard-detail__chip-strip-wrapper {
+  position: relative;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+@media (min-width: 40rem) {
+  .personal-dashboard-detail__chip-strip-wrapper {
+    flex: 1 1 0;
+  }
+}
+
+.personal-dashboard-detail__chip-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-25, 4px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.personal-dashboard-detail__chip-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.personal-dashboard-detail__chip-strip--has-clear {
+  padding-right: 3rem;
+}
+
+.personal-dashboard-detail__chip-clear-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 3.5rem;
+  background: linear-gradient(
+    to left,
+    var(--background-color-base, #fff) 30%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.cdx-button.personal-dashboard-detail__chip {
+  flex: 0 0 auto;
+  gap: var(--spacing-25, 4px);
+  font-weight: var(--font-weight-normal, 400);
+}
+
+.cdx-button.personal-dashboard-detail__chip--active:enabled {
+  background-color: var(--background-color-progressive-subtle, #eaf3ff);
+  border-color: var(--border-color-progressive, #36c);
+  color: var(--color-progressive, #36c);
+  font-weight: 500;
+}
+
+.cdx-button.personal-dashboard-detail__chip--active:enabled:hover {
+  background-color: var(--background-color-progressive-subtle--hover, #d9e2ff);
+  border-color: var(--border-color-progressive--hover, #36c);
+  color: var(--color-progressive--hover, #36c);
+}
+
+.cdx-button.personal-dashboard-detail__chip--empty {
+  color: var(--color-subtle);
+}
+
+.cdx-button.personal-dashboard-detail__chip--more:enabled {
+  color: var(--color-progressive, #36c);
+}
+
+.cdx-button.personal-dashboard-detail__chip-clear {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  transform: translateY(-50%);
+}
+
+.personal-dashboard-detail__chip-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.personal-dashboard-detail__chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  padding: 0 var(--spacing-25, 4px);
+  border-radius: var(--border-radius-pill, 9999px);
+  background-color: var(--background-color-neutral-subtle, #eaecf0);
+  color: var(--color-subtle, #54595d);
+  font-size: var(--font-size-x-small);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.personal-dashboard-detail__chip--active .personal-dashboard-detail__chip-count {
+  background-color: var(--background-color-progressive, #36c);
+  color: var(--color-inverted, #fff);
+}
+
+.personal-dashboard-detail__sort-menu-row {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: var(--spacing-50, 8px);
+  min-width: 0;
+  margin-left: auto;
+  color: var(--color-subtle, #54595d);
+  font-size: var(--font-size-small);
+}
+
+.personal-dashboard-detail__sort-menu-label {
+  flex: 0 0 auto;
+}
+
+.personal-dashboard-detail__sort-menu {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (min-width: 40rem) {
+  .personal-dashboard-detail__sort-menu-row {
+    flex: 0 0 auto;
+  }
+
+  .personal-dashboard-detail__sort-menu {
+    width: 11rem;
+  }
+}
+
+.personal-dashboard-detail__sort-menu :deep(.cdx-select-vue__handle) {
+  min-width: 0;
+  font-size: var(--font-size-small);
+}
+
+.personal-dashboard-detail__sort-menu :deep(.cdx-select-vue__handle .cdx-select-vue__handle__current-selection) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .personal-dashboard-detail__toolbar {
@@ -2476,9 +3609,14 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   font-weight: var(--font-weight-bold, 700);
 }
 
+/* Applied only to activity-count phrases, for example "2 contested"; never to time-count phrases. */
 .personal-dashboard-detail__lede-line .personal-dashboard-detail__lede-alert {
   color: var(--color-error);
   font-weight: var(--font-weight-bold, 700);
+}
+
+.personal-dashboard-detail__lede-line .personal-dashboard-detail__lede-neutral {
+  color: var(--color-subtle);
 }
 
 .personal-dashboard-detail__sort-row {
@@ -2507,6 +3645,24 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   gap: var(--spacing-100, 16px);
 }
 
+.personal-dashboard-detail__empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-75, 12px);
+  padding: var(--spacing-100, 16px);
+  border: 1px solid var(--border-color-subtle);
+  border-radius: var(--border-radius-base);
+  background-color: var(--background-color-base);
+}
+
+.personal-dashboard-detail__empty-state p {
+  margin: 0;
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-medium);
+}
+
 .personal-dashboard-detail__group-heading {
   margin: var(--spacing-25, 4px) 0 calc(var(--spacing-50, 8px) * -1);
   color: var(--color-error);
@@ -2515,6 +3671,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   letter-spacing: 0.04em;
   line-height: var(--line-height-medium);
   text-transform: uppercase;
+}
+
+.personal-dashboard-detail__group-heading--neutral {
+  color: var(--color-subtle);
 }
 
 .personal-dashboard-detail__request {
@@ -2663,6 +3823,21 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   font-weight: var(--font-weight-normal, 400);
 }
 
+.personal-dashboard-detail__primary-action-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.personal-dashboard-detail__action-footer--evidence .personal-dashboard-detail__primary-action-row {
+  display: block;
+}
+
+.personal-dashboard-detail__action-footer .personal-dashboard-detail__evidence-button {
+  display: block;
+  width: 100%;
+  font-weight: var(--font-weight-normal, 400);
+}
+
 .personal-dashboard-detail__action-links {
   display: flex;
   flex-wrap: nowrap;
@@ -2677,6 +3852,123 @@ function variantOptionLabel(variantId: DashboardVariantId) {
 .personal-dashboard-detail__action-links a {
   color: var(--color-progressive);
   text-decoration: none;
+}
+
+.personal-dashboard-detail__criterion-dialog-host :deep(.cdx-dialog-backdrop) {
+  background-color: var(--background-color-backdrop-light, rgba(0, 0, 0, 0.32));
+}
+
+.personal-dashboard-detail__criterion-dialog-host :deep(.personal-dashboard-detail__criterion-dialog.cdx-dialog) {
+  width: min(100%, 28rem);
+  max-height: 80vh;
+}
+
+@media (max-width: 39.99rem) {
+  .personal-dashboard-detail__criterion-dialog-host :deep(.cdx-dialog-backdrop) {
+    align-items: flex-end;
+  }
+
+  .personal-dashboard-detail__criterion-dialog-host :deep(.personal-dashboard-detail__criterion-dialog.cdx-dialog) {
+    border-bottom: 0;
+    border-radius: var(--border-radius-base) var(--border-radius-base) 0 0;
+    box-shadow: var(--box-shadow-drop-large, 0 -2px 12px rgba(0, 0, 0, 0.12));
+  }
+}
+
+.personal-dashboard-detail__criterion-dialog-host :deep(.personal-dashboard-detail__criterion-dialog .cdx-dialog__header) {
+  padding-block: var(--spacing-75, 12px) var(--spacing-50, 8px);
+}
+
+.personal-dashboard-detail__filter-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0 calc(var(--spacing-50, 8px) * -1);
+  padding: 0 var(--spacing-50, 8px) var(--spacing-50, 8px);
+  background-color: var(--background-color-base, #fff);
+}
+
+.personal-dashboard-detail__filter-section {
+  margin-top: var(--spacing-100, 16px);
+}
+
+.personal-dashboard-detail__filter-section + .personal-dashboard-detail__filter-section {
+  padding-top: var(--spacing-100, 16px);
+  border-top: 1px solid var(--border-color-subtle);
+}
+
+.personal-dashboard-detail__filter-section-heading {
+  margin: 0 0 var(--spacing-50, 8px);
+  color: var(--color-subtle);
+  font-size: var(--font-size-x-small);
+  font-weight: var(--font-weight-bold, 700);
+  letter-spacing: 0.04em;
+  line-height: var(--line-height-medium);
+  text-transform: uppercase;
+}
+
+.personal-dashboard-detail__filter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-25, 4px);
+}
+
+.personal-dashboard-detail__filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-50, 8px);
+  padding: var(--spacing-25, 4px) 0;
+}
+
+.personal-dashboard-detail__filter-checkbox {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.personal-dashboard-detail__filter-checkbox-label {
+  font-size: var(--font-size-small);
+}
+
+.personal-dashboard-detail__filter-checkbox-label strong {
+  font-weight: var(--font-weight-bold, 700);
+}
+
+.personal-dashboard-detail__filter-row-count {
+  flex: 0 0 auto;
+  min-width: 1.5rem;
+  padding: var(--spacing-12, 2px) var(--spacing-25, 4px);
+  border-radius: var(--border-radius-pill, 9999px);
+  background-color: rgba(0, 0, 0, 0.06);
+  color: var(--color-subtle);
+  font-size: var(--font-size-x-small);
+  font-weight: var(--font-weight-bold, 700);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.personal-dashboard-detail__filter-empty {
+  margin: var(--spacing-100, 16px) 0;
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
+  text-align: center;
+}
+
+.personal-dashboard-detail__filter-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-50, 8px);
+  width: 100%;
+}
+
+.personal-dashboard-detail__results-count {
+  margin: 0 0 var(--spacing-25, 4px);
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
 }
 
 .personal-dashboard-detail__field {
@@ -2755,7 +4047,8 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   letter-spacing: 0.04em;
 }
 
-.personal-dashboard-detail__criterion-eyebrow {
+.personal-dashboard-detail__criterion-eyebrow,
+.personal-dashboard-detail__category-eyebrow {
   display: block;
   margin: 0 0 var(--spacing-25, 4px);
   color: var(--color-subtle);
@@ -2764,6 +4057,56 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   letter-spacing: 0.04em;
   line-height: var(--line-height-medium);
   text-transform: uppercase;
+}
+
+.personal-dashboard-detail__category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-75, 12px);
+  margin: 0 0 var(--spacing-25, 4px);
+}
+
+.personal-dashboard-detail__category-row .personal-dashboard-detail__category-eyebrow {
+  min-width: 0;
+  margin: 0;
+  letter-spacing: 0.06em;
+}
+
+.personal-dashboard-detail__actor-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--spacing-25, 4px);
+  padding: var(--spacing-12, 2px) var(--spacing-50, 8px) var(--spacing-12, 2px) var(--spacing-25, 4px);
+  border-radius: var(--border-radius-pill, 9999px);
+  background-color: var(--background-color-neutral-subtle, rgba(0, 0, 0, 0.05));
+  color: var(--color-subtle);
+  font-size: var(--font-size-x-small);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.personal-dashboard-detail__actor-icon {
+  flex: none;
+  color: var(--color-subtle);
+}
+
+.personal-dashboard-detail__protection-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--spacing-25, 4px);
+  margin: var(--spacing-75, 12px) 0 0;
+  color: var(--color-base);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: var(--line-height-medium);
+}
+
+.personal-dashboard-detail__protection-stats-separator {
+  color: var(--color-subtle);
 }
 
 .personal-dashboard-detail__tagger {
@@ -3155,8 +4498,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   right: 0;
   bottom: 0;
   z-index: 30;
+  box-sizing: border-box;
   width: min(18rem, 84vw);
   padding: var(--spacing-100, 16px);
+  overflow-y: auto;
   border: 0;
   border-left: 1px solid var(--border-color-subtle);
   background: var(--background-color-base);
@@ -3193,18 +4538,38 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   background: var(--background-color-progressive-subtle);
 }
 
-.moderator-dashboard__variant-group {
+.moderator-dashboard__variant-section + .moderator-dashboard__variant-section,
+.moderator-dashboard__variant-section + .moderator-dashboard__variant-help {
   margin-top: var(--spacing-100, 16px);
   padding-top: var(--spacing-100, 16px);
   border-top: 1px solid var(--border-color-subtle);
 }
 
-.moderator-dashboard__variant-group-label {
+.moderator-dashboard__variant-fieldset {
+  margin-inline: 0;
+  padding-inline: 0;
+  padding-bottom: 0;
+  border-inline: 0;
+  border-bottom: 0;
+}
+
+.moderator-dashboard__variant-section-label {
   display: block;
   margin-bottom: var(--spacing-50, 8px);
   color: var(--color-subtle);
   font-size: var(--font-size-small);
   font-weight: 600;
+}
+
+.moderator-dashboard__variant-section h2 {
+  margin-top: 0;
+  line-height: var(--line-height-small, 1.4285714);
+}
+
+.moderator-dashboard__variant-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-50, 8px);
 }
 
 .moderator-dashboard__variant-subgroup {
@@ -3223,6 +4588,12 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.moderator-dashboard__variant-help {
+  color: var(--color-subtle);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-medium, 1.6);
 }
 
 @media (min-width: 48rem) {

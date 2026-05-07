@@ -28,42 +28,21 @@ const contextParam = computed<Context>(() => {
   return 'protection'
 })
 
+// Canonical "return to dashboard" URL — module mirrors the request context.
 const fallbackDashboardRoute = computed(() => ({
   path: '/admin-moderation-dashboard',
   query: {
-    variant: 'current',
+    variant: 'prototype-v2',
     direction: 'cards-attention',
+    protection: 'stale',
+    speedy: 'stale',
     module: contextParam.value,
   },
 }))
 
-function isDashboardPath(path: unknown): path is string {
-  return (
-    typeof path === 'string' &&
-    (path === fallbackDashboardRoute.value.path ||
-      path.startsWith(`${fallbackDashboardRoute.value.path}?`))
-  )
-}
-
-function getDashboardBackPath() {
-  const previousPath = window.history.state?.back
-  return isDashboardPath(previousPath) ? previousPath : null
-}
-
-function getDashboardReturnPath() {
-  const returnPath = window.history.state?.dashboardReturnTo
-  return isDashboardPath(returnPath) ? returnPath : null
-}
-
 function goBackToDashboard(event: Event) {
   event.preventDefault()
-  if (getDashboardBackPath()) {
-    router.back()
-  } else if (getDashboardReturnPath()) {
-    router.push(getDashboardReturnPath() as string)
-  } else {
-    router.push(fallbackDashboardRoute.value)
-  }
+  router.push(fallbackDashboardRoute.value)
 }
 
 interface RequestEntry {

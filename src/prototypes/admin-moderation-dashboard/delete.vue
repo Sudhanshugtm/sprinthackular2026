@@ -110,54 +110,37 @@ const creationLogPreview = computed(() => {
   return s.length > max ? `${s.slice(0, max).trimEnd()}…` : s
 })
 
+// Canonical "return to dashboard" URL for any speedy-module surface.
 const fallbackDashboardRoute = {
   path: '/admin-moderation-dashboard',
   query: {
-    variant: 'current',
+    variant: 'prototype-v2',
     direction: 'cards-attention',
+    protection: 'stale',
+    speedy: 'stale',
     module: 'speedy',
   },
 }
 
-function isDashboardPath(path: unknown): path is string {
-  return (
-    typeof path === 'string' &&
-    (path === fallbackDashboardRoute.path || path.startsWith(`${fallbackDashboardRoute.path}?`))
-  )
-}
-
-function getDashboardBackPath() {
-  const previousPath = window.history.state?.back
-  return isDashboardPath(previousPath) ? previousPath : null
-}
-
-function getDashboardReturnPath() {
-  const returnPath = window.history.state?.dashboardReturnTo
-  return isDashboardPath(returnPath) ? returnPath : null
-}
-
 function onConfirm(event: Event) {
   event.preventDefault()
-  router.push({
-    path: '/admin-moderation-dashboard',
+  const incomingCriterion =
+    typeof route.query.criterion === 'string' && route.query.criterion
+      ? route.query.criterion
+      : 'G15'
+  router.replace({
+    path: '/admin-moderation-dashboard/post-action',
     query: {
-      variant: 'current',
-      direction: 'cards-attention',
-      module: 'speedy',
-      deleted: pageTitle.value,
+      action: 'deleted',
+      title: pageTitle.value,
+      criterion: incomingCriterion,
     },
   })
 }
 
 function goBackToDashboard(event: Event) {
   event.preventDefault()
-  if (getDashboardBackPath()) {
-    router.back()
-  } else if (getDashboardReturnPath()) {
-    router.push(getDashboardReturnPath() as string)
-  } else {
-    router.push(fallbackDashboardRoute)
-  }
+  router.push(fallbackDashboardRoute)
 }
 
 function onCancel(event: Event) {

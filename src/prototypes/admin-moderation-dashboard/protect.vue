@@ -148,54 +148,38 @@ const reason = ref<string>('other')
 const otherReason = ref<string>('')
 const watchPage = ref<boolean>(true)
 
+// Canonical "return to dashboard" URL for any protection-module surface.
 const fallbackDashboardRoute = {
   path: '/admin-moderation-dashboard',
   query: {
-    variant: 'current',
+    variant: 'prototype-v2',
     direction: 'cards-attention',
+    protection: 'stale',
+    speedy: 'stale',
     module: 'protection',
   },
 }
 
-function isDashboardPath(path: unknown): path is string {
-  return (
-    typeof path === 'string' &&
-    (path === fallbackDashboardRoute.path || path.startsWith(`${fallbackDashboardRoute.path}?`))
-  )
-}
-
-function getDashboardBackPath() {
-  const previousPath = window.history.state?.back
-  return isDashboardPath(previousPath) ? previousPath : null
-}
-
-function getDashboardReturnPath() {
-  const returnPath = window.history.state?.dashboardReturnTo
-  return isDashboardPath(returnPath) ? returnPath : null
-}
-
 function onConfirm(event: Event) {
   event.preventDefault()
-  router.push({
-    path: '/admin-moderation-dashboard',
+  // Stay close to today's MediaWiki: redirect to the article so the lock icon
+  // visibly takes effect. The receiving article view picks up the just-protected
+  // query params and renders a confirmation banner above the toolbar.
+  router.replace({
+    path: '/admin-moderation-dashboard/article',
     query: {
-      variant: 'current',
-      direction: 'cards-attention',
+      title: pageTitle.value,
       module: 'protection',
-      protected: pageTitle.value,
+      'just-protected': 'true',
+      duration: '1 week semi-protection',
+      request: `/admin-moderation-dashboard/request?title=${encodeURIComponent(pageTitle.value)}&context=protection`,
     },
   })
 }
 
 function goBackToDashboard(event: Event) {
   event.preventDefault()
-  if (getDashboardBackPath()) {
-    router.back()
-  } else if (getDashboardReturnPath()) {
-    router.push(getDashboardReturnPath() as string)
-  } else {
-    router.push(fallbackDashboardRoute)
-  }
+  router.push(fallbackDashboardRoute)
 }
 
 function onCancel(event: Event) {
