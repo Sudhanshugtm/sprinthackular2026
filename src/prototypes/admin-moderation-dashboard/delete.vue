@@ -119,13 +119,21 @@ const fallbackDashboardRoute = {
   },
 }
 
-function hasDashboardHistory() {
-  const previousPath = window.history.state?.back
+function isDashboardPath(path: unknown): path is string {
   return (
-    typeof previousPath === 'string' &&
-    (previousPath === fallbackDashboardRoute.path ||
-      previousPath.startsWith(`${fallbackDashboardRoute.path}?`))
+    typeof path === 'string' &&
+    (path === fallbackDashboardRoute.path || path.startsWith(`${fallbackDashboardRoute.path}?`))
   )
+}
+
+function getDashboardBackPath() {
+  const previousPath = window.history.state?.back
+  return isDashboardPath(previousPath) ? previousPath : null
+}
+
+function getDashboardReturnPath() {
+  const returnPath = window.history.state?.dashboardReturnTo
+  return isDashboardPath(returnPath) ? returnPath : null
 }
 
 function onConfirm(event: Event) {
@@ -143,8 +151,10 @@ function onConfirm(event: Event) {
 
 function goBackToDashboard(event: Event) {
   event.preventDefault()
-  if (hasDashboardHistory()) {
+  if (getDashboardBackPath()) {
     router.back()
+  } else if (getDashboardReturnPath()) {
+    router.push(getDashboardReturnPath() as string)
   } else {
     router.push(fallbackDashboardRoute)
   }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { CdxButton, CdxIcon, CdxInfoChip, CdxSelect } from '@wikimedia/codex'
 import {
@@ -43,6 +43,7 @@ definePage({
 })
 
 const router = useRouter()
+const route = useRoute()
 
 type TaskType = 'protection' | 'deletion'
 type TaskStatus = 'needs-review' | 'in-discussion' | 'already-handled'
@@ -669,6 +670,7 @@ function openProtectForm(request: ProtectionRequestCard) {
   return router.push({
     path: '/admin-moderation-dashboard/protect',
     query: { title: request.title },
+    state: { dashboardReturnTo: route.fullPath },
   })
 }
 
@@ -676,6 +678,7 @@ function openDeleteForm(request: SpeedyDeletionCard) {
   return router.push({
     path: '/admin-moderation-dashboard/delete',
     query: { title: request.title },
+    state: { dashboardReturnTo: route.fullPath },
   })
 }
 
@@ -683,6 +686,7 @@ function openHistoryPage(title: string, module: 'protection' | 'speedy') {
   return router.push({
     path: '/admin-moderation-dashboard/history',
     query: { title, module },
+    state: { dashboardReturnTo: route.fullPath },
   })
 }
 
@@ -690,6 +694,7 @@ function openRequestPage(title: string, context: 'protection' | 'speedy') {
   return router.push({
     path: '/admin-moderation-dashboard/request',
     query: { title, context },
+    state: { dashboardReturnTo: route.fullPath },
   })
 }
 
@@ -697,6 +702,7 @@ function openDeclinePage(title: string, context: 'protection' | 'speedy') {
   return router.push({
     path: '/admin-moderation-dashboard/decline',
     query: { title, context },
+    state: { dashboardReturnTo: route.fullPath },
   })
 }
 

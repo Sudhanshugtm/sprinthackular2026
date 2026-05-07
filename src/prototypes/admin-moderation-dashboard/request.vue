@@ -37,19 +37,30 @@ const fallbackDashboardRoute = computed(() => ({
   },
 }))
 
-function hasDashboardHistory() {
-  const previousPath = window.history.state?.back
+function isDashboardPath(path: unknown): path is string {
   return (
-    typeof previousPath === 'string' &&
-    (previousPath === fallbackDashboardRoute.value.path ||
-      previousPath.startsWith(`${fallbackDashboardRoute.value.path}?`))
+    typeof path === 'string' &&
+    (path === fallbackDashboardRoute.value.path ||
+      path.startsWith(`${fallbackDashboardRoute.value.path}?`))
   )
+}
+
+function getDashboardBackPath() {
+  const previousPath = window.history.state?.back
+  return isDashboardPath(previousPath) ? previousPath : null
+}
+
+function getDashboardReturnPath() {
+  const returnPath = window.history.state?.dashboardReturnTo
+  return isDashboardPath(returnPath) ? returnPath : null
 }
 
 function goBackToDashboard(event: Event) {
   event.preventDefault()
-  if (hasDashboardHistory()) {
+  if (getDashboardBackPath()) {
     router.back()
+  } else if (getDashboardReturnPath()) {
+    router.push(getDashboardReturnPath() as string)
   } else {
     router.push(fallbackDashboardRoute.value)
   }
