@@ -48,10 +48,14 @@ const bucketOrder: Record<'regular' | 'template' | 'example', number> = {
   example: 2,
 }
 
+const visiblePrototypePaths = new Set([
+  '/admin-moderation-dashboard',
+])
+
 const prototypes = computed<PrototypeEntry[]>(() => {
   return router
     .getRoutes()
-    .filter((route) => route.path !== '/' && route.path !== '/:catchAll(.*)')
+    .filter((route) => visiblePrototypePaths.has(route.path))
     .map((route) => {
       const meta = (route.meta ?? {}) as PrototypeMeta
       const description =
