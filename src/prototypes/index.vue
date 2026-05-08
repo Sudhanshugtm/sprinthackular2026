@@ -1,8 +1,8 @@
 <script setup lang="ts">
 definePage({
   meta: {
-    title: 'ProtoWiki',
-    description: 'Prototype index',
+    title: 'Admin moderation dashboard',
+    description: 'Mobile logged-in dashboard prototype for admin moderation triage.',
   },
 })
 
@@ -79,7 +79,7 @@ const prototypes = computed<PrototypeEntry[]>(() => {
 </script>
 
 <template>
-  <PlainWrapper heading="ProtoWiki">
+  <PlainWrapper heading="Admin moderation dashboard">
     <div class="prototype-index">
       <div class="prototype-index__list" role="list">
         <div v-for="entry in prototypes" :key="entry.path" class="prototype-index__card" role="listitem">
