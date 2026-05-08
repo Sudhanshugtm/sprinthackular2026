@@ -1643,7 +1643,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                   v-for="request in sortedOptionBProtectionRequests"
                   :key="request.id"
                   class="personal-dashboard-detail__request"
-                  :class="{ 'personal-dashboard-detail__request--v2': isAttentionCardTreatment }"
+                  :class="{
+                    'personal-dashboard-detail__request--v2': isAttentionCardTreatment,
+                    'personal-dashboard-detail__request--prototype-v2': usesPrototypeV2EvidenceFooter,
+                  }"
                 >
                   <template v-if="isAttentionCardTreatment">
                     <CdxInfoChip
@@ -1728,7 +1731,6 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                             class="personal-dashboard-detail__evidence-button"
                             action="progressive"
                             weight="primary"
-                            size="small"
                             @click.stop="openHistoryPage(request.title, 'protection')"
                           >
                             View history
@@ -1833,7 +1835,7 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                 v-if="showPrototypeV2SpeedyCriterionFilter"
                 class="personal-dashboard-detail__list-toolbar"
               >
-                <div class="personal-dashboard-detail__chip-strip-wrapper">
+                <div class="personal-dashboard-detail__chip-strip-wrapper personal-dashboard-detail__chip-strip-wrapper--criterion">
                   <div
                     class="personal-dashboard-detail__chip-strip"
                     :class="{ 'personal-dashboard-detail__chip-strip--has-clear': hasAnyActiveFilter }"
@@ -1868,18 +1870,23 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                         class="personal-dashboard-detail__chip-count"
                       >{{ getCriterionCount(code) }}</span>
                     </CdxButton>
-                    <CdxButton
-                      class="personal-dashboard-detail__chip personal-dashboard-detail__chip--more"
-                      weight="normal"
-                      @click="openCriterionSheet"
-                    >
-                      <CdxIcon
-                        :icon="cdxIconFunnel"
-                        size="x-small"
-                      />
-                      <span class="personal-dashboard-detail__chip-label">Filters</span>
-                    </CdxButton>
                   </div>
+
+                  <div
+                    class="personal-dashboard-detail__chip-more-fade"
+                    aria-hidden="true"
+                  />
+                  <CdxButton
+                    class="personal-dashboard-detail__chip personal-dashboard-detail__chip--more"
+                    weight="normal"
+                    @click="openCriterionSheet"
+                  >
+                    <CdxIcon
+                      :icon="cdxIconFunnel"
+                      size="x-small"
+                    />
+                    <span class="personal-dashboard-detail__chip-label">More</span>
+                  </CdxButton>
 
                   <div
                     v-if="hasAnyActiveFilter"
@@ -1912,7 +1919,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                 </label>
               </div>
 
-              <div class="personal-dashboard-detail__requests">
+              <div
+                class="personal-dashboard-detail__requests"
+                :class="{ 'personal-dashboard-detail__requests--compact-results': showPrototypeV2SpeedyCriterionFilter }"
+              >
                 <div
                   v-if="showSpeedyCriterionEmptyState"
                   class="personal-dashboard-detail__empty-state"
@@ -1938,7 +1948,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                     v-for="request in sortedOptionBSpeedyDeletionRequests"
                     :key="request.id"
                     class="personal-dashboard-detail__request"
-                    :class="{ 'personal-dashboard-detail__request--v2': isAttentionCardTreatment }"
+                    :class="{
+                      'personal-dashboard-detail__request--v2': isAttentionCardTreatment,
+                      'personal-dashboard-detail__request--prototype-v2': usesPrototypeV2EvidenceFooter,
+                    }"
                   >
                     <template v-if="isAttentionCardTreatment">
                       <CdxInfoChip
@@ -1983,7 +1996,6 @@ function variantOptionLabel(variantId: DashboardVariantId) {
                               class="personal-dashboard-detail__evidence-button"
                               action="progressive"
                               weight="primary"
-                              size="small"
                               @click.stop="openArticlePage(request.title, 'speedy')"
                             >
                               View page
@@ -3468,6 +3480,14 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   padding-right: 3rem;
 }
 
+.personal-dashboard-detail__chip-strip-wrapper--criterion .personal-dashboard-detail__chip-strip {
+  padding-inline-end: calc(var(--spacing-200) + var(--spacing-200) + var(--spacing-200));
+}
+
+.personal-dashboard-detail__chip-strip-wrapper--criterion .personal-dashboard-detail__chip-strip--has-clear {
+  padding-inline-end: calc(var(--spacing-200) + var(--spacing-200) + var(--spacing-200) + var(--spacing-200) + var(--spacing-200));
+}
+
 .personal-dashboard-detail__chip-clear-fade {
   position: absolute;
   top: 0;
@@ -3478,6 +3498,21 @@ function variantOptionLabel(variantId: DashboardVariantId) {
     to left,
     var(--background-color-base, #fff) 30%,
     rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.personal-dashboard-detail__chip-more-fade {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  width: calc(var(--spacing-200) + var(--spacing-200) + var(--spacing-200));
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--background-color-base)
   );
   pointer-events: none;
 }
@@ -3505,8 +3540,13 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   color: var(--color-subtle);
 }
 
-.cdx-button.personal-dashboard-detail__chip--more:enabled {
-  color: var(--color-progressive, #36c);
+.cdx-button.personal-dashboard-detail__chip--more {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 2;
+  color: var(--color-progressive);
+  transform: translateY(-50%);
 }
 
 .cdx-button.personal-dashboard-detail__chip-clear {
@@ -3518,6 +3558,21 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   height: 1.75rem;
   padding: 0;
   transform: translateY(-50%);
+}
+
+.personal-dashboard-detail__chip-strip-wrapper--criterion .personal-dashboard-detail__chip-clear-fade {
+  right: calc(var(--spacing-200) + var(--spacing-200) + var(--spacing-200));
+  width: var(--spacing-200);
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--background-color-base)
+  );
+}
+
+.personal-dashboard-detail__chip-strip-wrapper--criterion .personal-dashboard-detail__chip-clear {
+  right: calc(var(--spacing-200) + var(--spacing-200) + var(--spacing-200));
+  z-index: 2;
 }
 
 .personal-dashboard-detail__chip-label {
@@ -3691,6 +3746,10 @@ function variantOptionLabel(variantId: DashboardVariantId) {
 
 .personal-dashboard-detail__request--v2 {
   cursor: default;
+}
+
+.personal-dashboard-detail__request--prototype-v2 .personal-dashboard-detail__importance {
+  margin-top: 0;
 }
 
 .personal-dashboard-detail__request:hover,
@@ -3969,6 +4028,14 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   margin: 0 0 var(--spacing-25, 4px);
   color: var(--color-subtle);
   font-size: var(--font-size-small);
+}
+
+.personal-dashboard-detail__requests--compact-results {
+  gap: var(--spacing-50);
+}
+
+.personal-dashboard-detail__requests--compact-results .personal-dashboard-detail__results-count {
+  margin-bottom: 0;
 }
 
 .personal-dashboard-detail__field {
