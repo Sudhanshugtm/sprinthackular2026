@@ -594,14 +594,175 @@ const optionBProtectionRequests: ProtectionRequestCard[] = [
     actorCount: 3,
     ageHours: 2,
   },
+  {
+    id: 'pacific-typhoon-season',
+    title: '2026 Pacific typhoon season',
+    visibility: '3.2k views/day · storm activity rising',
+    requestSummary: 'Semi-protection requested for 3 days',
+    requesterQuote: 'Anonymous editors are repeatedly adding unsourced landfall forecasts before advisories are published.',
+    signalLabel: 'Vandalism',
+    signalLine: 'Forecast vandalism · last revert 1h ago',
+    status: 'No admin reply',
+    activeScore: 65,
+    actorCount: 2,
+    ageHours: 1,
+  },
+  {
+    id: 'sports-results-template',
+    title: 'Template:Current sports results',
+    visibility: 'Transcluded on 420 pages · high edit volume',
+    requestSummary: 'Template protection requested until tournament close',
+    requesterQuote: 'Scores are being changed before sources update, then reverted across many pages.',
+    signalLabel: 'High-risk template',
+    signalLine: 'High-use template · 7 editors in 4h',
+    status: 'Discussion active',
+    activeScore: 80,
+    actorCount: 8,
+    ageHours: 4,
+  },
+  {
+    id: 'texas-senate-election',
+    title: '2026 United States Senate election in Texas',
+    visibility: '18k views/day · election article',
+    requestSummary: 'Extended-confirmed protection requested',
+    requesterQuote: 'Campaign dispute has moved from talk page to repeated lead-section changes.',
+    signalLabel: 'Arbitration',
+    signalLine: 'Political topic restriction · 5 actors',
+    status: 'Under review',
+    activeScore: 75,
+    actorCount: 5,
+    ageHours: 7,
+  },
+  {
+    id: 'riverbend-health-network',
+    title: 'Riverbend Health Network',
+    visibility: '640 views/day · corporate article',
+    requestSummary: 'Semi-protection requested for paid editing disruption',
+    requesterQuote: 'New accounts keep restoring promotional service claims after COI warnings.',
+    signalLabel: 'Paid · Recreation',
+    signalLine: 'Paid-editing pattern · tagged 16h ago',
+    status: 'No admin reply',
+    activeScore: 60,
+    actorCount: 2,
+    ageHours: 16,
+  },
+  {
+    id: 'viral-tiktok-challenges',
+    title: 'List of viral TikTok challenges',
+    visibility: '6.8k views/day · trending',
+    requestSummary: 'Semi-protection requested for recurring disruption',
+    requesterQuote: 'Editors are re-adding prank entries with no reliable sources after each revert.',
+    signalLabel: 'Disruptive editing',
+    signalLine: 'Unsourced additions · 11h open',
+    status: 'Discussion active',
+    activeScore: 58,
+    actorCount: 4,
+    ageHours: 11,
+  },
+  {
+    id: 'world-chess-championship',
+    title: '2025 World Chess Championship',
+    visibility: '7.5k views/day · match week',
+    requestSummary: 'Temporary semi-protection requested',
+    requesterQuote: 'Score table edits are being made before games finish and sourced updates arrive.',
+    signalLabel: 'Vandalism',
+    signalLine: 'Live-event vandalism · last revert 5h ago',
+    status: 'Discussion active',
+    activeScore: 52,
+    actorCount: 3,
+    ageHours: 5,
+  },
+  {
+    id: 'sundar-pichai',
+    title: 'Sundar Pichai',
+    visibility: '24k views/day · BLP',
+    requestSummary: 'Semi-protection requested for unsourced personal claims',
+    requesterQuote: 'Fresh accounts keep adding allegations and employment details without sources.',
+    signalLabel: 'BLP',
+    signalLine: 'BLP claims · 13h open',
+    status: 'Under review',
+    activeScore: 50,
+    actorCount: 4,
+    ageHours: 13,
+  },
+  {
+    id: 'draftfactory-userpage',
+    title: 'User:DraftFactory',
+    visibility: 'User-space page · repeated recreation',
+    requestSummary: 'User page protection requested',
+    requesterQuote: 'Blocked promotion account keeps recreating the same draft farm from alternate accounts.',
+    signalLabel: 'Paid · Recreation',
+    signalLine: 'Repeated recreation · 20h open',
+    status: 'Waiting on requester',
+    activeScore: 35,
+    actorCount: 2,
+    ageHours: 20,
+  },
+  {
+    id: 'covid-template',
+    title: 'Template:COVID-19 pandemic data',
+    visibility: 'Transcluded on 180 pages · medical topic',
+    requestSummary: 'Template protection requested for medical-data churn',
+    requesterQuote: 'Editors are changing figures before the dashboard source updates.',
+    signalLabel: 'High-risk template',
+    signalLine: 'Medical template · 8h open',
+    status: 'Discussion active',
+    activeScore: 68,
+    actorCount: 7,
+    ageHours: 8,
+  },
+  {
+    id: 'arb-enforcement-noticeboard',
+    title: 'Arbitration enforcement noticeboard',
+    visibility: 'Project page · active disputes',
+    requestSummary: 'Temporary protection requested during heated filing',
+    requesterQuote: 'Parties are altering each other\'s statements while the request is being reviewed.',
+    signalLabel: 'Arbitration',
+    signalLine: 'Project-space dispute · 15h open',
+    status: 'Waiting on requester',
+    activeScore: 40,
+    actorCount: 3,
+    ageHours: 15,
+  },
+  {
+    id: 'metrolink-extension',
+    title: 'MetroLink extension plan',
+    visibility: '1.1k views/day · local infrastructure',
+    requestSummary: 'Semi-protection requested for sockpuppet additions',
+    requesterQuote: 'Multiple accounts are restoring the same unsourced cost figures after warnings.',
+    signalLabel: 'Sockpuppetry',
+    signalLine: 'Possible sock cluster · 10h open',
+    status: 'Under review',
+    activeScore: 38,
+    actorCount: 2,
+    ageHours: 10,
+  },
 ]
 
 const overTargetProtectionCount = computed(() => optionBProtectionRequests.filter((request) => request.ageHours > 12).length)
-const showProtectionOverTargetHeader = computed(() =>
+const showProtectionRequestGroupHeading = computed(() =>
   isAttentionCardTreatment.value &&
-  activeProtectionState.value === 'stale' &&
-  protectionSortValue.value === 'oldest'
+  activeProtectionState.value === 'stale'
 )
+
+function formatProtectionCategoryHeading(categories: string[]) {
+  if (categories.length === 0) {
+    return 'All protection requests'
+  }
+
+  if (categories.length === 1) {
+    return `${categories[0]} protection requests`
+  }
+
+  const remainingFilterCount = categories.length - 1
+  const filterLabel = remainingFilterCount === 1 ? 'filter' : 'filters'
+  return `${categories[0]} + ${remainingFilterCount} ${filterLabel} protection requests`
+}
+
+const protectionRequestGroupHeading = computed(() => {
+  const label = formatProtectionCategoryHeading(activeProtectionCategories.value)
+  return `${label} (${sortedOptionBProtectionRequests.value.length})`
+})
 
 const protectionCategoryCounts = computed(() => {
   const counts = new Map<string, number>()
@@ -866,8 +1027,8 @@ function isAdminPrototypeVariantId(value: DashboardVariantId) {
   return value === 'option-b' || value === 'current' || value === 'prototype-v2'
 }
 
-function getDefaultProtectionSort(_state: ProtectionCardState) {
-  return 'most-active'
+function getDefaultProtectionSort(state: ProtectionCardState) {
+  return state === 'stale' ? 'oldest' : 'most-active'
 }
 
 function getDefaultSpeedySort(state: SpeedyCardState) {
@@ -1632,11 +1793,11 @@ function variantOptionLabel(variantId: DashboardVariantId) {
 
               <div class="personal-dashboard-detail__requests">
                 <p
-                  v-if="showProtectionOverTargetHeader"
-                  class="personal-dashboard-detail__group-heading"
+                  v-if="showProtectionRequestGroupHeading"
+                  class="personal-dashboard-detail__group-heading personal-dashboard-detail__group-heading--list"
                   :class="{ 'personal-dashboard-detail__group-heading--neutral': usesPrototypeV2UrgencyCalibration }"
                 >
-                  Over 12h target ({{ overTargetProtectionCount }})
+                  {{ protectionRequestGroupHeading }}
                 </p>
 
                 <article
@@ -3583,19 +3744,32 @@ function variantOptionLabel(variantId: DashboardVariantId) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.125rem;
-  height: 1.125rem;
-  padding: 0 var(--spacing-25, 4px);
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--spacing-35, 6px);
+  border: 1px solid var(--border-color-subtle);
   border-radius: var(--border-radius-pill, 9999px);
-  background-color: var(--background-color-neutral-subtle, #eaecf0);
-  color: var(--color-subtle, #54595d);
+  background-color: var(--background-color-base);
+  color: var(--color-base);
   font-size: var(--font-size-x-small);
-  font-weight: 500;
+  font-weight: var(--font-weight-bold, 700);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
+.cdx-button.personal-dashboard-detail__chip:not(.personal-dashboard-detail__chip--active) .personal-dashboard-detail__chip-count {
+  border-color: var(--border-color-muted, var(--border-color-subtle));
+  background-color: var(--background-color-neutral-subtle, #eaecf0);
+  color: var(--color-base, #202122);
+}
+
+.cdx-button.personal-dashboard-detail__chip:not(.personal-dashboard-detail__chip--active):enabled:hover .personal-dashboard-detail__chip-count {
+  border-color: var(--border-color-progressive, #36c);
+  color: var(--color-progressive, #36c);
+}
+
 .personal-dashboard-detail__chip--active .personal-dashboard-detail__chip-count {
+  border-color: var(--background-color-progressive, #36c);
   background-color: var(--background-color-progressive, #36c);
   color: var(--color-inverted, #fff);
 }
@@ -3730,6 +3904,14 @@ function variantOptionLabel(variantId: DashboardVariantId) {
 
 .personal-dashboard-detail__group-heading--neutral {
   color: var(--color-subtle);
+}
+
+.personal-dashboard-detail__group-heading--list {
+  overflow: hidden;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .personal-dashboard-detail__request {
